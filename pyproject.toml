@@ -1,0 +1,24 @@
+[project]
+name = "agents-team"
+version = "0.1.0"
+description = "Time de agentes de engenharia portável entre harnesses"
+requires-python = ">=3.11"
+dependencies = [
+    "jsonschema[format-nongpl]>=4.18",
+    "referencing>=0.30",
+    "pyyaml>=6",
+]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["orchestrator/agents_team"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["orchestrator"]

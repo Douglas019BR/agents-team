@@ -1,0 +1,29 @@
+{
+  "schema": "agents-team/finding-report@1",
+  "card": "QAPC-1234",
+  "flow": "implement-system",
+  "iteration": 1,
+  "agent": { "name": "zuko", "role": "sec", "model": "model-c" },
+  "verdict": "block",
+  "summary": "Token é escrito em log de debug.",
+  "findings": [
+    {
+      "id": "S-001",
+      "severity": "high",
+      "category": "secrets",
+      "file": "src/auth/token.py",
+      "line": 51,
+      "message": "logger.debug imprime o token completo.",
+      "suggestion": "Logar apenas os 4 últimos caracteres ou remover o log.",
+      "blocking": true,
+      "owner": "aang-dev",
+      "source": "semgrep",
+      "rule_id": "python.lang.security.audit.logging.sensitive-data"
+    }
+  ],
+  "tools_run": [
+    { "name": "semgrep", "version": "1.90.0", "status": "ran" },
+    { "name": "gitleaks", "status": "ran" },
+    { "name": "osv-scanner", "status": "not_installed" }
+  ]
+}

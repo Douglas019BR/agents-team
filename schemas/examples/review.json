@@ -1,0 +1,38 @@
+{
+  "schema": "agents-team/finding-report@1",
+  "card": "QAPC-1234",
+  "flow": "implement-system",
+  "iteration": 1,
+  "agent": { "name": "sokka", "role": "reviewer", "model": "model-b" },
+  "created_at": "2026-10-30T15:00:00-03:00",
+  "commit": "a1b2c3d",
+  "verdict": "request_changes",
+  "summary": "Implementação cobre os critérios, mas o parse do token não trata payload nulo.",
+  "findings": [
+    {
+      "id": "R-001",
+      "severity": "medium",
+      "category": "correctness",
+      "file": "src/auth/token.py",
+      "line": 42,
+      "message": "parse_token() quebra com payload None.",
+      "suggestion": "Validar None antes do decode e lançar InvalidToken.",
+      "blocking": true,
+      "owner": "aang-dev",
+      "source": "llm"
+    },
+    {
+      "id": "R-002",
+      "severity": "info",
+      "category": "readability",
+      "file": "src/auth/token.py",
+      "line": 10,
+      "message": "Nome 'x' pouco descritivo.",
+      "blocking": false,
+      "owner": "aang-dev"
+    }
+  ],
+  "jira_actions": [
+    { "type": "comment", "body": "Critério de aceite 3 não especifica o comportamento com token nulo; assumido InvalidToken." }
+  ]
+}

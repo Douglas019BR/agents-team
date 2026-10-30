@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.agents-team.dev/v1/agents-team-config.schema.json",
+  "title": "agents-team: configuração do repositório-alvo (.agents-team.yml)",
+  "description": "Gerado pela skill de discovery. Fica no repositório-alvo, excluído via .git/info/exclude.",
+  "type": "object",
+  "required": ["version", "stack", "commands", "paths"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "const": 1 },
+    "generated": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "by": { "type": "string" },
+        "at": { "type": "string", "format": "date-time" },
+        "commit": { "type": "string" },
+        "confidence": {
+          "description": "Campos que a discovery inferiu sem certeza e o humano deve conferir.",
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "stack": {
+      "type": "object",
+      "required": ["language"],
+      "additionalProperties": false,
+      "properties": {
+        "language": { "type": "string" },
+        "language_version": { "type": "string" },
+        "package_manager": { "type": "string" },
+        "test_runner": { "type": "string" },
+        "bdd": { "enum": ["behave", "none"] },
+        "frameworks": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "commands": {
+      "description": "Comandos executados na raiz do worktree. Também viram a allowlist de shell dos agentes.",
+      "type": "object",
+      "required": ["test"],
+      "additionalProperties": false,
+      "properties": {
+        "setup": { "type": "string" },
+        "build": { "type": "string" },
+        "test": { "type": "string" },
+        "test_single": {
+          "description": "Template com {target}, ex.: pytest {target}.",
+          "type": "string",
+          "pattern": "\\{target\\}"
+        },
+        "bdd": { "type": "string" },
+        "lint": { "type": "string" },
+        "format": { "type": "string" },
+        "typecheck": { "type": "string" }
+      }
+    },
+    "paths": {
+      "description": "Globs relativos à raiz. Viram os limites de escrita da Toph e do Aang.",
+      "type": "object",
+      "required": ["source", "tests"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "$ref": "#/$defs/globs" },
+        "tests": { "$ref": "#/$defs/globs" },
+        "features": { "$ref": "#/$defs/globs" },
+        "steps": { "$ref": "#/$defs/globs" },
+        "protected": {
+          "description": "Nenhum agente escreve aqui (ex.: .env, migrações aplicadas, CI).",
+          "$ref": "#/$defs/globs"
+        }
+      }
+    },
+    "security": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tools": {
+          "description": "Scanners detectados localmente.",
+          "type": "array",
+          "items": { "enum": ["semgrep", "gitleaks", "osv-scanner", "trivy", "bandit", "pip-audit"] },
+          "uniqueItems": true
+        },
+        "block_severity": { "enum": ["medium", "high", "critical"], "default": "high" }
+      }
+    },
+    "commits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "convention": { "enum": ["conventional", "free"], "default": "conventional" },
+        "scopes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "jira": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "project_keys": { "type": "array", "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9]+$" } },
+        "flow_by_issue_type": {
+          "description": "Mapeamento tipo de issue → fluxo. Ex.: {\"Test Automation\": \"bdd-behave\"}.",
+          "type": "object",
+          "additionalProperties": { "$ref": "common.schema.json#/$defs/flow" }
+        },
+        "flow_by_label": {
+          "type": "object",
+          "additionalProperties": { "$ref": "common.schema.json#/$defs/flow" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "globs": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 }
+  }
+}

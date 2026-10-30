@@ -1,0 +1,36 @@
+version: 1
+generated:
+  by: discovery-skill
+  at: "2026-10-30T14:00:00-03:00"
+  confidence: [commands.typecheck]
+stack:
+  language: python
+  language_version: "3.12"
+  package_manager: uv
+  test_runner: pytest
+  bdd: behave
+commands:
+  setup: uv sync
+  test: uv run pytest
+  test_single: uv run pytest {target}
+  bdd: uv run behave
+  lint: uv run ruff check .
+  typecheck: uv run mypy src
+paths:
+  source: ["src/**"]
+  tests: ["tests/**"]
+  features: ["features/**/*.feature"]
+  steps: ["features/steps/**"]
+  protected: [".env*", ".gitlab-ci.yml", "migrations/applied/**"]
+security:
+  tools: [semgrep, gitleaks]
+  block_severity: high
+commits:
+  convention: conventional
+jira:
+  project_keys: [QAPC, OFDB]
+  flow_by_issue_type:
+    Story: implement-system
+    Test Automation: bdd-behave
+  flow_by_label:
+    peer-review: peer-review

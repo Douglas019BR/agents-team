@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.agents-team.dev/v1/finding-report.schema.json",
+  "title": "agents-team: relatório de achados (review.json, qa.json, sec.json)",
+  "type": "object",
+  "required": ["schema", "card", "flow", "iteration", "agent", "verdict", "summary", "findings"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "const": "agents-team/finding-report@1" },
+    "card": { "$ref": "common.schema.json#/$defs/card_key" },
+    "flow": { "$ref": "common.schema.json#/$defs/flow" },
+    "iteration": { "type": "integer", "minimum": 1, "maximum": 3 },
+    "agent": { "$ref": "common.schema.json#/$defs/agent_ref" },
+    "created_at": { "$ref": "common.schema.json#/$defs/iso_datetime" },
+    "commit": {
+      "description": "Commit da branch de trabalho analisado.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,40}$"
+    },
+    "verdict": { "$ref": "common.schema.json#/$defs/verdict" },
+    "summary": { "type": "string", "minLength": 1 },
+    "findings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/finding" }
+    },
+    "test_run": {
+      "description": "Katara: resultado da execução de testes.",
+      "type": "object",
+      "required": ["command", "exit_code", "passed", "failed"],
+      "additionalProperties": false,
+      "properties": {
+        "command": { "type": "string" },
+        "exit_code": { "type": "integer" },
+        "passed": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 },
+        "skipped": { "type": "integer", "minimum": 0 },
+        "flaky": {
+          "description": "Testes que mudaram de resultado entre execuções repetidas.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "log_path": { "type": "string" }
+      }
+    },
+    "tools_run": {
+      "description": "Zuko (e Katara, se aplicável): ferramentas determinísticas executadas.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "status"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "version": { "type": "string" },
+          "status": { "enum": ["ran", "not_installed", "failed"] },
+          "raw_output_path": { "type": "string" }
+        }
+      }
+    },
+    "jira_actions": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/jira_action" }
+    }
+  },
+  "allOf": [
+    {
+      "description": "block exige ao menos um achado bloqueante.",
+      "if": { "properties": { "verdict": { "const": "block" } } },
+      "then": { "properties": { "findings": { "contains": { "properties": { "blocking": { "const": true } }, "required": ["blocking"] } } } }
+    },
+    {
+      "description": "approve não pode ter achado bloqueante.",
+      "if": { "properties": { "verdict": { "const": "approve" } } },
+      "then": { "properties": { "findings": { "items": { "properties": { "blocking": { "const": false } } } } } }
+    }
+  ],
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "required": ["id", "severity", "category", "message", "blocking", "owner"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "R = revisor, Q = QA, S = sec, T = SDET. Único dentro do relatório.",
+          "type": "string",
+          "pattern": "^[RQST]-[0-9]{3}$"
+        },
+        "severity": { "$ref": "common.schema.json#/$defs/severity" },
+        "category": {
+          "type": "string",
+          "enum": [
+            "correctness", "design", "readability", "test", "test-coverage", "test-ownership",
+            "flaky", "security", "secrets", "dependency", "performance", "acceptance-criteria", "other"
+          ]
+        },
+        "file": { "type": "string" },
+        "line": { "type": "integer", "minimum": 1 },
+        "end_line": { "type": "integer", "minimum": 1 },
+        "message": { "type": "string", "minLength": 1 },
+        "suggestion": { "type": "string" },
+        "blocking": { "type": "boolean" },
+        "owner": {
+          "description": "Agente responsável pela correção (nome-cargo, ex.: aang-dev) ou 'human'.",
+          "type": "string",
+          "pattern": "^([a-z][a-z0-9]*-[a-z]+|human)$"
+        },
+        "source": {
+          "description": "Origem do achado: 'llm' ou o nome da ferramenta (semgrep, gitleaks, ...).",
+          "type": "string"
+        },
+        "rule_id": { "type": "string" },
+        "status": {
+          "description": "Estado em iterações seguintes.",
+          "enum": ["open", "fixed", "disputed", "wont_fix"]
+        }
+      }
+    }
+  }
+}
