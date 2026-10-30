@@ -1,7 +1,7 @@
 [project]
 name = "agents-team"
 version = "0.1.0"
-description = "Time de agentes de engenharia portável entre harnesses"
+description = "Harness-portable team of engineering agents"
 requires-python = ">=3.11"
 dependencies = [
     "jsonschema[format-nongpl]>=4.18",

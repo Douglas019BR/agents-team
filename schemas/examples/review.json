@@ -2,8 +2,13 @@
   "schema": "agents-team/finding-report@1",
   "card": "QAPC-1234",
   "flow": "implement-system",
+  "stage": "code",
   "iteration": 1,
-  "agent": { "name": "sokka", "role": "reviewer", "model": "model-b" },
+  "agent": {
+    "name": "sokka",
+    "role": "reviewer",
+    "model": "model-b"
+  },
   "created_at": "2026-10-30T15:00:00-03:00",
   "commit": "a1b2c3d",
   "verdict": "request_changes",
@@ -33,6 +38,9 @@
     }
   ],
   "jira_actions": [
-    { "type": "comment", "body": "Critério de aceite 3 não especifica o comportamento com token nulo; assumido InvalidToken." }
+    {
+      "type": "comment",
+      "body": "Critério de aceite 3 não especifica o comportamento com token nulo; assumido InvalidToken."
+    }
   ]
 }

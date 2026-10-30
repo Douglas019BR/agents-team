@@ -24,14 +24,33 @@ implementação de qualquer agente.
 
 | Nome        | Papel     | Escreve                              | Commita | Invocação          |
 |-------------|-----------|--------------------------------------|---------|--------------------|
+| Aang        | Dev       | `plan.md`, código de produção, step definitions | sim | orquestrador |
 | Toph        | SDET      | testes (`.feature`, testes unitários) | sim     | orquestrador       |
-| Aang        | Dev       | código de produção, step definitions | sim     | orquestrador       |
-| Sokka       | Revisor   | achados, `AGENT-NOTE`                | não     | orquestrador       |
+| Sokka       | Revisor   | achados (plano e código)             | não     | orquestrador       |
 | Katara      | QA        | achados, relatórios de execução      | não     | orquestrador       |
 | Zuko        | Sec       | achados, relatórios de scanners      | não     | orquestrador       |
 | Uncle Iroh  | Professor | nada (só leitura)                    | não     | **só pelo humano** |
 
 Os nomes são configuráveis na definição de cada agente e não ficam fixos no código.
+
+### 2.0 Modelos
+
+Configuráveis por agente e por fase em `~/.agents-team/config.yml`. Padrão:
+
+| Agente     | Fase        | Modelo              |
+|------------|-------------|---------------------|
+| Aang       | `plan`      | `claude-opus-5.5`   |
+| Aang       | `implement` | `glm-5`             |
+| Toph       | todas       | `claude-sonnet-5.5` |
+| Sokka      | todas       | `gpt-5.6-terra`     |
+| Katara     | `qa`        | `claude-haiku-5.5`  |
+| Zuko       | `sec`       | `gpt-5.6-luna`      |
+| Uncle Iroh | `teach`     | `claude-opus-5.5`   |
+
+Regras: o revisor nunca usa o mesmo modelo do dev (um teste garante isso); o `auto` não é usado,
+porque quebra a garantia de diversidade e a rastreabilidade dos evals. Riscos a acompanhar nos evals:
+`glm-5` na implementação (número de iterações) e `gpt-5.6-luna` na triagem de segurança (falsos
+negativos).
 
 ### 2.1 Regras de propriedade
 
@@ -52,7 +71,9 @@ Todos os fluxos começam pela **skill de discovery**: se o repositório-alvo nã
 ### 3.1 Implementar sistema
 
 ```
-Toph (testes que falham) → Aang (implementa até passar) → Sokka → Katara ∥ Zuko
+Aang (plan.md) → Sokka (revisa o plano; no máximo 1 revisão) [→ humano, se plan_approval: human]
+  → Toph (testes que falham, contra as interfaces do plano)
+  → Aang (implementa até passar) → Sokka → Katara ∥ Zuko
   → consolidação → [request_changes? volta ao Aang ou à Toph, até 3 iterações]
   → montagem da branch oficial → humano revisa, faz push e abre o MR
 ```
@@ -130,10 +151,15 @@ Neste fluxo nenhum agente commita, e nenhum publica comentário.
 Formato rígido, que dá para achar com grep:
 
 ```
-// AGENT-NOTE(sokka-reviewer -> aang-dev): validar null antes do parse
-# AGENT-NOTE(zuko-sec -> aang-dev): não logar o token
+// AGENT-NOTE(R-001 sokka-reviewer -> aang-dev): validar null antes do parse
+# AGENT-NOTE(S-001 zuko-sec -> aang-dev): não logar o token
 ```
 
+- **Os revisores não editam arquivos.** O orquestrador transforma cada achado com `file` e `line` em
+  um `AGENT-NOTE` e commita como `orchestrator: add review notes (iteration NN)`. Assim Sokka, Katara
+  e Zuko ficam com escrita zero no repositório.
+- Quem corrige o achado remove a nota no mesmo commit. Para contestar, edita o texto da nota e
+  explica no seu artefato.
 - Os comentários servem para conversa. Decisões e vereditos ficam nos artefatos (seção 6).
 - O orquestrador remove todos os `AGENT-NOTE` ao montar a branch oficial.
 - **Um gate final falha se sobrar qualquer `AGENT-NOTE`** na branch oficial.
@@ -164,6 +190,8 @@ compartilhado entre worktrees. A raiz é configurável e o padrão é `~/.agents
     cards/<CARD>/                 # CARD = chave do Jira (PROJ-123)
       card.md                     # snapshot do cartão lido do Jira
       state.json                  # fluxo, fase, iteração, vereditos
+      plan.md                     # Aang (fase plan)
+      plan-review.json            # Sokka (stage plan, iteration 0)
       test-plan.md                # Toph
       iterations/01/
         change-summary.md         # Aang
@@ -173,11 +201,16 @@ compartilhado entre worktrees. A raiz é configurável e o padrão é `~/.agents
       grouping-plan.md            # plano de agrupamento dos commits
       final-report.md
     reviews/<MR-iid>/             # fluxo 3.3
+      coverage.json               # Toph (stage coverage)
+      review.json, qa.json, sec.json
       draft-comments.md
     teaching/                     # Uncle Iroh, só sob demanda
 ```
 
 A sessão do harness não é chave de nada, porque é efêmera e depende do harness.
+
+**Idioma:** prompts, código, chaves e enums em inglês. Textos lidos por humanos (`summary`,
+`message`, artefatos Markdown, `jira_actions`, rascunho de comentários) saem no idioma do cartão.
 
 ### 6.2 `.agents-team.yml` (no repositório-alvo, sem commit)
 
@@ -292,10 +325,10 @@ agents-team/
   README.md
   AGENTS.md
   docs/design.md
-  agents/            toph-sdet.md, aang-dev.md, sokka-reviewer.md, katara-qa.md, zuko-sec.md, uncle-iroh-teacher.md
+  agents/            _shared.md, aang.md, toph.md, sokka.md, katara.md, zuko.md, uncle-iroh.md
   skills/discovery/SKILL.md
   workflows/         implement-system.yml, bdd-behave.yml, peer-review.yml
-  schemas/           finding-report.schema.json, state.schema.json, agents-team-config.schema.json
+  schemas/           common, finding-report, state, agents-team-config, team-config, agent-definition
   orchestrator/
   adapters/          kiro/, claude-code/, ...
   evals/
@@ -303,8 +336,7 @@ agents-team/
 
 ## 11. Questões em aberto
 
-1. Mapeamento padrão de modelo por papel.
-2. Licença do repositório.
+1. Licença do repositório.
 
 ## 12. Registro de decisões
 
@@ -313,5 +345,8 @@ agents-team/
 - 2026-10-30: `jira_actions` só são aplicadas após confirmação humana, via MCP da Atlassian;
   orquestrador com código próprio mínimo, sem framework; fluxo 3.3 construído do zero (sem reaproveitar
   o agente `mr-reviewer`; o bot `@devops.n8n` é um sistema à parte).
+- 2026-10-30: Aang planeja (`plan.md`) antes da Toph, e o Sokka revisa o plano; modelos por agente e
+  por fase (seção 2.0); revisores não editam arquivos, o orquestrador gera os `AGENT-NOTE`; prompts em
+  inglês, textos para humanos no idioma do cartão.
 - Ordem de implementação: schemas → definições canônicas dos agentes → adaptador Kiro → skill de
   discovery → orquestrador → evals.

@@ -1,4 +1,4 @@
-"""Carrega e valida os artefatos do agents-team contra os schemas versionados."""
+"""Load and validate agents-team artifacts against the versioned schemas."""
 
 from __future__ import annotations
 
@@ -13,11 +13,13 @@ from referencing import Registry, Resource
 
 SCHEMAS_DIR = Path(__file__).resolve().parents[2] / "schemas"
 
-# nome lógico -> arquivo
+# logical name -> schema file
 SCHEMAS = {
     "finding-report": "finding-report.schema.json",
     "state": "state.schema.json",
     "config": "agents-team-config.schema.json",
+    "team-config": "team-config.schema.json",
+    "agent-definition": "agent-definition.schema.json",
 }
 
 
@@ -42,9 +44,9 @@ def validator(name: str) -> Draft202012Validator:
 
 
 def errors(name: str, data: Any) -> list[str]:
-    """Lista de erros legíveis; vazia quando o documento é válido."""
+    """Human-readable validation errors; empty when the document is valid."""
     found = sorted(validator(name).iter_errors(data), key=lambda e: list(e.absolute_path))
-    return [f"{'/'.join(map(str, e.absolute_path)) or '<raiz>'}: {e.message}" for e in found]
+    return [f"{'/'.join(map(str, e.absolute_path)) or '<root>'}: {e.message}" for e in found]
 
 
 def load(path: Path) -> Any:

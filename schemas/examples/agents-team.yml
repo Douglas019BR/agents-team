@@ -34,3 +34,5 @@ jira:
     Test Automation: bdd-behave
   flow_by_label:
     peer-review: peer-review
+workflow:
+  plan_approval: reviewer

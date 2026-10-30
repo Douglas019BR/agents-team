@@ -1,0 +1,14 @@
+version: 1
+harness: kiro
+state_root: ~/.agents-team
+max_iterations: 3
+max_plan_rounds: 2
+models:
+  aang:
+    plan: claude-opus-5.5
+    implement: glm-5
+  toph: claude-sonnet-5.5
+  sokka: gpt-5.6-terra
+  katara: claude-haiku-5.5
+  zuko: gpt-5.6-luna
+  uncle-iroh: claude-opus-5.5

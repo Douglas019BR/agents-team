@@ -1,124 +1,266 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.agents-team.dev/v1/state.schema.json",
-  "title": "agents-team: estado de um cartão (cards/<CARD>/state.json)",
-  "description": "Escrito só pelo orquestrador. Agentes nunca editam este arquivo.",
+  "title": "agents-team: card state (cards/<CARD>/state.json)",
+  "description": "Written only by the orchestrator. Agents never edit this file.",
   "type": "object",
-  "required": ["schema", "card", "repo_id", "flow", "phase", "iteration", "max_iterations", "created_at", "updated_at", "history"],
+  "required": [
+    "schema",
+    "card",
+    "repo_id",
+    "flow",
+    "phase",
+    "iteration",
+    "max_iterations",
+    "created_at",
+    "updated_at",
+    "history"
+  ],
   "additionalProperties": false,
   "properties": {
-    "schema": { "const": "agents-team/state@1" },
-    "card": { "$ref": "common.schema.json#/$defs/card_key" },
+    "schema": {
+      "const": "agents-team/state@1"
+    },
+    "card": {
+      "$ref": "common.schema.json#/$defs/card_key"
+    },
     "repo_id": {
-      "description": "Slug do remote (ex.: grupo-subgrupo-projeto).",
+      "description": "Remote slug (e.g. group-subgroup-project).",
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9._-]*$"
     },
-    "flow": { "$ref": "common.schema.json#/$defs/flow" },
-    "phase": { "$ref": "#/$defs/phase" },
-    "iteration": { "type": "integer", "minimum": 0, "maximum": 3 },
-    "max_iterations": { "type": "integer", "minimum": 1, "maximum": 3, "default": 3 },
-    "worktree": { "type": "string" },
+    "flow": {
+      "$ref": "common.schema.json#/$defs/flow"
+    },
+    "phase": {
+      "$ref": "#/$defs/phase"
+    },
+    "iteration": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 3
+    },
+    "max_iterations": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3,
+      "default": 3
+    },
+    "worktree": {
+      "type": "string"
+    },
     "branches": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "base": { "type": "string" },
-        "work": { "type": "string", "pattern": "^agents/[^/]+/work$" },
-        "official": { "type": "string", "pattern": "^feature/.+$" }
+        "base": {
+          "type": "string"
+        },
+        "work": {
+          "type": "string",
+          "pattern": "^agents/[^/]+/work$"
+        },
+        "official": {
+          "type": "string",
+          "pattern": "^feature/.+$"
+        }
       }
     },
     "merge_request": {
-      "description": "Só no fluxo peer-review.",
+      "description": "Only in the peer-review flow.",
       "type": "object",
-      "required": ["project", "iid"],
+      "required": [
+        "project",
+        "iid"
+      ],
       "additionalProperties": false,
       "properties": {
-        "project": { "type": "string" },
-        "iid": { "type": "integer", "minimum": 1 },
-        "url": { "type": "string", "format": "uri" },
-        "head_sha": { "type": "string" }
+        "project": {
+          "type": "string"
+        },
+        "iid": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "head_sha": {
+          "type": "string"
+        }
       }
     },
     "verdicts": {
-      "description": "Vereditos por iteração e por papel.",
+      "description": "Verdicts per iteration and per role. Key 'plan' holds the plan review.",
       "type": "object",
       "patternProperties": {
         "^[0-9]{2}$": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "reviewer": { "$ref": "common.schema.json#/$defs/verdict" },
-            "qa": { "$ref": "common.schema.json#/$defs/verdict" },
-            "sec": { "$ref": "common.schema.json#/$defs/verdict" },
-            "sdet": { "$ref": "common.schema.json#/$defs/verdict" }
+            "reviewer": {
+              "$ref": "common.schema.json#/$defs/verdict"
+            },
+            "qa": {
+              "$ref": "common.schema.json#/$defs/verdict"
+            },
+            "sec": {
+              "$ref": "common.schema.json#/$defs/verdict"
+            },
+            "sdet": {
+              "$ref": "common.schema.json#/$defs/verdict"
+            }
           }
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "properties": {
+        "plan": {
+          "$ref": "common.schema.json#/$defs/verdict"
+        }
+      }
     },
     "pending_jira_actions": {
-      "description": "Lote consolidado aguardando confirmação humana.",
+      "description": "Consolidated batch awaiting human confirmation.",
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["from", "action"],
+        "required": [
+          "from",
+          "action"
+        ],
         "additionalProperties": false,
         "properties": {
-          "from": { "type": "string" },
-          "action": { "$ref": "common.schema.json#/$defs/jira_action" }
+          "from": {
+            "type": "string"
+          },
+          "action": {
+            "$ref": "common.schema.json#/$defs/jira_action"
+          }
         }
       }
     },
     "escalation": {
       "type": "object",
-      "required": ["reason"],
+      "required": [
+        "reason"
+      ],
       "additionalProperties": false,
       "properties": {
-        "reason": { "enum": ["max_iterations", "agent_error", "ambiguous_card", "human_requested"] },
-        "detail": { "type": "string" }
+        "reason": {
+          "enum": [
+            "max_iterations",
+            "agent_error",
+            "ambiguous_card",
+            "human_requested"
+          ]
+        },
+        "detail": {
+          "type": "string"
+        }
       }
     },
-    "created_at": { "$ref": "common.schema.json#/$defs/iso_datetime" },
-    "updated_at": { "$ref": "common.schema.json#/$defs/iso_datetime" },
+    "created_at": {
+      "$ref": "common.schema.json#/$defs/iso_datetime"
+    },
+    "updated_at": {
+      "$ref": "common.schema.json#/$defs/iso_datetime"
+    },
     "history": {
-      "description": "Log de transições, só de anexação.",
+      "description": "Append-only transition log.",
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["at", "from", "to"],
+        "required": [
+          "at",
+          "from",
+          "to"
+        ],
         "additionalProperties": false,
         "properties": {
-          "at": { "$ref": "common.schema.json#/$defs/iso_datetime" },
-          "from": { "anyOf": [{ "$ref": "#/$defs/phase" }, { "type": "null" }] },
-          "to": { "$ref": "#/$defs/phase" },
-          "iteration": { "type": "integer", "minimum": 0 },
-          "by": { "type": "string" },
-          "note": { "type": "string" }
+          "at": {
+            "$ref": "common.schema.json#/$defs/iso_datetime"
+          },
+          "from": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/phase"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "to": {
+            "$ref": "#/$defs/phase"
+          },
+          "iteration": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "by": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
         }
       }
+    },
+    "plan_round": {
+      "description": "Plan rounds used (1 = first plan, 2 = one revision).",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2
     }
   },
   "allOf": [
     {
-      "if": { "properties": { "flow": { "const": "peer-review" } } },
-      "then": { "required": ["merge_request"] },
-      "else": { "required": ["branches"] }
+      "if": {
+        "properties": {
+          "flow": {
+            "const": "peer-review"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "merge_request"
+        ]
+      },
+      "else": {
+        "required": [
+          "branches"
+        ]
+      }
     },
     {
-      "if": { "properties": { "phase": { "const": "escalated" } } },
-      "then": { "required": ["escalation"] }
+      "if": {
+        "properties": {
+          "phase": {
+            "const": "escalated"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "escalation"
+        ]
+      }
     }
   ],
   "$defs": {
     "phase": {
-      "description": "Fases da máquina de estados. As transições válidas ficam em workflows/<flow>.yml.",
+      "description": "State machine phases. Valid transitions live in workflows/<flow>.yml.",
       "type": "string",
       "enum": [
         "created",
         "discovery",
         "classify",
         "fetch_mr",
+        "plan",
+        "plan_review",
         "sdet",
         "dev",
         "review",

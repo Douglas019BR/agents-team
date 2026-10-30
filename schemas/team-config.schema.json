@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.agents-team.dev/v1/team-config.schema.json",
+  "title": "agents-team: global team config (~/.agents-team/config.yml)",
+  "description": "User-level settings shared by every target repository.",
+  "type": "object",
+  "required": ["version", "harness", "models"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "const": 1 },
+    "harness": {
+      "description": "Runner used to execute each role.",
+      "enum": ["kiro"]
+    },
+    "state_root": {
+      "description": "Root of the local state tree.",
+      "type": "string",
+      "default": "~/.agents-team"
+    },
+    "max_iterations": { "type": "integer", "minimum": 1, "maximum": 3, "default": 3 },
+    "max_plan_rounds": { "type": "integer", "minimum": 1, "maximum": 2, "default": 2 },
+    "models": {
+      "description": "Model per agent. A string applies to every phase; a map sets one model per phase.",
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9-]*$" },
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "string", "minLength": 1 },
+          {
+            "type": "object",
+            "minProperties": 1,
+            "propertyNames": { "pattern": "^[a-z][a-z_]*$" },
+            "additionalProperties": { "type": "string", "minLength": 1 }
+          }
+        ]
+      }
+    }
+  }
+}

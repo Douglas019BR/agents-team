@@ -2,8 +2,13 @@
   "schema": "agents-team/finding-report@1",
   "card": "QAPC-1234",
   "flow": "implement-system",
+  "stage": "code",
   "iteration": 1,
-  "agent": { "name": "zuko", "role": "sec", "model": "model-c" },
+  "agent": {
+    "name": "zuko",
+    "role": "sec",
+    "model": "model-c"
+  },
   "verdict": "block",
   "summary": "Token é escrito em log de debug.",
   "findings": [
@@ -22,8 +27,18 @@
     }
   ],
   "tools_run": [
-    { "name": "semgrep", "version": "1.90.0", "status": "ran" },
-    { "name": "gitleaks", "status": "ran" },
-    { "name": "osv-scanner", "status": "not_installed" }
+    {
+      "name": "semgrep",
+      "version": "1.90.0",
+      "status": "ran"
+    },
+    {
+      "name": "gitleaks",
+      "status": "ran"
+    },
+    {
+      "name": "osv-scanner",
+      "status": "not_installed"
+    }
   ]
 }
