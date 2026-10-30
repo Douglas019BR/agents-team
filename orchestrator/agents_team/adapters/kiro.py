@@ -163,12 +163,12 @@ def render_prompt(agent: AgentDefinition, phase: str) -> str:
     )
 
 
-def write_bundle(agent: AgentDefinition, phase: str, ctx: RunContext, out_dir: Path) -> Path:
+def write_bundle(agent: AgentDefinition, phase: str, ctx: RunContext, out_dir: Path, extra_prompt: str = "") -> Path:
     """Write ``<name>.json`` and ``<name>.prompt.md`` to ``out_dir``; return the JSON path."""
     out_dir.mkdir(parents=True, exist_ok=True)
     name = agent_name(agent, phase)
     prompt_path = out_dir / f"{name}.prompt.md"
-    prompt_path.write_text(render_prompt(agent, phase), encoding="utf-8")
+    prompt_path.write_text(render_prompt(agent, phase) + extra_prompt, encoding="utf-8")
     config_path = out_dir / f"{name}.json"
     config = render(agent, phase, ctx, prompt_path)
     config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")

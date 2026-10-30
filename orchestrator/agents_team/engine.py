@@ -13,12 +13,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shlex
 import shutil
 import subprocess
 import unicodedata
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -165,6 +167,29 @@ class Engine:
 
     def run(self, repo_id: str, card: str, max_steps: int = 40) -> dict[str, Any]:
         store, state = self._open(repo_id, card)
+        with self._lock(store.card_dir):
+            return self._advance(store, state, max_steps)
+
+    @staticmethod
+    @contextmanager
+    def _lock(card_dir: Path):
+        """One orchestrator per card. A lock left by a dead process is taken over."""
+        lock = card_dir / ".run.lock"
+        try:
+            pid = int(lock.read_text().strip())
+            os.kill(pid, 0)
+            raise EngineError(f"card is already being run by pid {pid}; check `agents-team status`")
+        except (FileNotFoundError, ValueError, ProcessLookupError):
+            pass
+        except PermissionError:
+            raise EngineError(f"card is locked by another user's process ({lock})")
+        lock.write_text(str(os.getpid()))
+        try:
+            yield
+        finally:
+            lock.unlink(missing_ok=True)
+
+    def _advance(self, store: CardStore, state: dict[str, Any], max_steps: int) -> dict[str, Any]:
         for _ in range(max_steps):
             if state["phase"] in TERMINAL or state["phase"] == "awaiting_human":
                 return state

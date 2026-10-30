@@ -413,3 +413,15 @@ def test_junk_never_reaches_official_branch(tmp_path, repo):
     state = engine.run(rid, CARD)
     official = sh(wt, "diff", "--name-only", f"main..{state['branches']['official']}").splitlines()
     assert sorted(official) == ["src/token.py", "tests/test_token.py"]
+
+
+def test_concurrent_run_is_refused(tmp_path, repo):
+    import os
+    engine, rid = started(tmp_path, repo, FakeRunner())
+    lock = tmp_path / "home" / "repos" / rid / "cards" / CARD / ".run.lock"
+    lock.write_text(str(os.getpid()))  # a live process holds the card
+    with pytest.raises(EngineError, match="already being run"):
+        engine.run(rid, CARD)
+    lock.write_text("999999999")  # stale lock from a dead process is taken over
+    assert engine.run(rid, CARD)["awaiting"]["what"] == "grouping"
+    assert not lock.exists()
