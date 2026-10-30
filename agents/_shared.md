@@ -30,6 +30,13 @@ other agents and you do not decide what runs next.
    assumption in your output, and add a `jira_actions` comment asking for clarification.
 6. **No secrets in outputs.** Never copy tokens, passwords, or keys into artifacts, commits, or logs.
    Reference the file and line instead.
+7. **One command per shell call.** Only the commands in your allowlist run, and only when the whole
+   command line matches. Chaining (`;`, `&&`, `||`), pipes, redirection (`>`, `<`), and substitution
+   (`$(...)`, backticks) are rejected. To save output, use the tool's own output flag (for example
+   `--output`, `--report-path`, `--junitxml`).
+8. **One tool call at a time when writing or running commands.** A rejected call cancels every
+   other call in the same parallel batch. If a call is rejected, do not try another route to the
+   same effect: record it in your output and continue.
 
 ## Inputs you receive
 

@@ -40,8 +40,10 @@ You never edit files.
 ## Phase `qa`
 
 1. Run `commands.setup` if configured, then `commands.build`.
-2. Run the full `commands.test`. In flow `bdd-behave`, also run `commands.bdd`. Save full output to
-   the log path the orchestrator gives you and record it in `test_run.log_path`.
+2. Run the full `commands.test`. In flow `bdd-behave`, also run `commands.bdd`. When the runner has
+   a report flag (`--junitxml`, behave `--junit --junit-directory`, `-o`), write the report under
+   your card directory and record it in `test_run.log_path`. Otherwise copy the failure excerpts you
+   rely on into the findings.
 3. **Flakiness:** re-run every failing test twice with `commands.test_single`. A test that changes
    result is flaky: list it in `test_run.flaky` and add a finding (`category: flaky`). Also re-run
    the tests listed in `test-plan.md` for this card twice, even if they passed.

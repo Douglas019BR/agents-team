@@ -299,11 +299,23 @@ do KiroCrew (`kirocrew agent create`).
 | `model`                        | `model`                                               |
 | servidores MCP                 | `mcpServers`                                          |
 
-- O adaptador gera os arquivos em `~/.kiro/agents/` e registra cada papel no KiroCrew com
-  `kirocrew agent create --name <nome> --kiro-agent <nome>`.
-- **Runner Kiro:** `kiro-cli chat --no-interactive --agent <nome> --model <modelo> --trust-tools=<lista>`,
-  executado no worktree do cartão. A lista de `--trust-tools` sai da definição canônica, nunca de
-  `--trust-all-tools`.
+- **Um agente Kiro por (agente, fase)**, gerado a cada execução em `<worktree>/.kiro/agents/at-<agente>-<fase>.json`
+  (agente local do Kiro). Os escopos dependem do repositório-alvo e do cartão, então não há instalação
+  global dos agentes do fluxo. `.kiro/` entra no `.git/info/exclude`. Só o Uncle Iroh, chamado pelo
+  humano, é instalado em `~/.kiro/agents/` e registrado no KiroCrew.
+- **Runner Kiro:** `kiro-cli chat --no-interactive --agent at-<agente>-<fase> --model <modelo> "<tarefa>"`,
+  executado no worktree do cartão, **sem `--trust-tools`**.
+- **Comportamento verificado no kiro-cli 2.19 (modo não interativo):**
+  - escrita fora de `allowedPaths` é rejeitada, sem pedir aprovação; `deniedPaths` vence `allowedPaths`;
+  - com `denyByDefault`, um comando que não casa inteiro com `allowedCommands` é rejeitado; as regex
+    geradas proíbem `; & | ` $ < >` e quebra de linha, o que bloqueia encadeamento, redirecionamento e
+    substituição (`ls; touch x`, `ls $(...)`, `ls && ...` foram rejeitados no teste);
+  - `allowedTools` e `--trust-tools` passam por cima das regras de caminho e comando, por isso `write`
+    e `shell` nunca entram neles;
+  - uma chamada rejeitada cancela as outras do mesmo lote paralelo; os prompts pedem uma chamada por vez.
+- Limitação: o Kiro injeta recursos padrão em agentes customizados (`AGENTS.md`, `README.md`, steering
+  global e do projeto). A opção `chat.disableInheritingDefaultResources` é global, então não é usada;
+  os prompts dos agentes têm precedência declarada sobre esses recursos.
 - Os limites de escrita da Toph (só caminhos de teste) e do Aang (sem tocar nos testes da Toph) são
   impostos por `toolsSettings.write`. A verificação do Sokka pelo diff continua como segunda camada.
 - **Entrada no KiroCrew:** um agente `agents-team` no dashboard recebe o pedido em linguagem natural
@@ -348,5 +360,7 @@ agents-team/
 - 2026-10-30: Aang planeja (`plan.md`) antes da Toph, e o Sokka revisa o plano; modelos por agente e
   por fase (seção 2.0); revisores não editam arquivos, o orquestrador gera os `AGENT-NOTE`; prompts em
   inglês, textos para humanos no idioma do cartão.
+- 2026-10-30: adaptador Kiro gera um agente local por (agente, fase); permissões verificadas no
+  kiro-cli 2.19 em modo não interativo (seção 8.1).
 - Ordem de implementação: schemas → definições canônicas dos agentes → adaptador Kiro → skill de
   discovery → orquestrador → evals.

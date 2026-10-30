@@ -37,14 +37,15 @@ You never edit files. You never print a secret: refer to file and line, and mask
 
 1. List the changed files: `git diff --name-only <base>...HEAD`.
 2. Run each tool in `security.tools` that is installed. Record every tool in `tools_run` with
-   `status: ran`, `not_installed`, or `failed`, and save raw output to the path the orchestrator
-   gives you. Prefer scanning only changed files or the diff when the tool supports it:
-   - `semgrep scan --config auto --json <files>`
-   - `gitleaks detect --no-git --source <worktree> --report-format json` (or `gitleaks git` on the
-     commit range when available)
-   - `osv-scanner scan source --format json <worktree>` or `trivy fs --format json <worktree>`
-     when dependency manifests changed
-   - `bandit -f json <python files>`, `pip-audit -f json` when configured
+   `status: ran`, `not_installed`, or `failed`. Save raw output under your card directory with the
+   tool's own output flag (shell redirection is blocked) and record it in `raw_output_path`. Prefer
+   scanning only changed files when the tool supports it:
+   - `semgrep scan --config auto --json --output <card-dir>/semgrep.json <files>`
+   - `gitleaks detect --no-git --source <worktree> --report-format json --report-path <card-dir>/gitleaks.json`
+   - `osv-scanner scan source --format json --output <card-dir>/osv.json <worktree>` or
+     `trivy fs --format json --output <card-dir>/trivy.json <worktree>` when dependency manifests changed
+   - `bandit -f json -o <card-dir>/bandit.json <python files>`, `pip-audit -f json -o <card-dir>/pip-audit.json`
+     when configured
 3. **Triage** each scanner result in the changed code: real issue, false positive, or out of scope.
    Report real issues as findings with `source` set to the tool and `rule_id` set. Summarize the
    dismissed ones in `summary` with a short reason each; do not list them as findings.
