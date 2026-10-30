@@ -19,12 +19,14 @@ def agents():
 
 @pytest.fixture
 def ctx(tmp_path):
+    card = tmp_path / "state" / "cards" / "QAPC-1"
     return kiro.RunContext(
         worktree=tmp_path / "wt",
-        card_dir=tmp_path / "state" / "cards" / "QAPC-1",
+        card_dir=card,
         repo_config=load(EXAMPLES / "agents-team.yml"),
         team_models=load(EXAMPLES / "team-config.yml")["models"],
         teaching_dir=tmp_path / "state" / "teaching",
+        outputs=(f"{card}/out.json",),
     )
 
 
@@ -114,10 +116,15 @@ def test_aang_writes_source_not_tests(agents, ctx, tmp_path):
     assert f"{ctx.worktree}/features/**/*.feature" in cfg["deniedPaths"]
 
 
-def test_aang_plan_phase_writes_only_artifacts(agents, ctx, tmp_path):
+def test_aang_plan_phase_writes_only_its_outputs(agents, ctx, tmp_path):
     cfg = kiro.render(agents["aang"], "plan", ctx, tmp_path / "p.md")
     assert cfg["model"] == "claude-opus-5.5"
-    assert cfg["toolsSettings"]["write"]["allowedPaths"] == [f"{ctx.card_dir}/**"]
+    assert cfg["toolsSettings"]["write"]["allowedPaths"] == [f"{ctx.card_dir}/out.json"]
+
+
+def test_artifacts_scope_never_opens_whole_card_dir(agents, ctx, tmp_path):
+    for _, _, cfg in _all_configs(agents, ctx, tmp_path):
+        assert f"{ctx.card_dir}/**" not in cfg["toolsSettings"].get("write", {}).get("allowedPaths", [])
 
 
 def test_toph_writes_tests_not_source(agents, ctx, tmp_path):
@@ -144,9 +151,9 @@ def test_zuko_shell_is_scanners_and_git_only(agents, ctx, tmp_path):
 
 def test_missing_optional_paths_are_skipped(agents, ctx, tmp_path):
     cfg = dict(ctx.repo_config, paths={"source": ["src/**"], "tests": ["tests/**"]})
-    small = kiro.RunContext(ctx.worktree, ctx.card_dir, cfg, ctx.team_models)
+    small = kiro.RunContext(ctx.worktree, ctx.card_dir, cfg, ctx.team_models, outputs=ctx.outputs)
     write = kiro.render(agents["aang"], "implement", small, tmp_path / "p.md")["toolsSettings"]["write"]
-    assert write["allowedPaths"] == [f"{ctx.worktree}/src/**", f"{ctx.card_dir}/**"]
+    assert write["allowedPaths"] == [f"{ctx.worktree}/src/**", f"{ctx.card_dir}/out.json"]
 
 
 def test_unknown_phase_rejected(agents, ctx, tmp_path):

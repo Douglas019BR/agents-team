@@ -153,7 +153,8 @@
             "max_iterations",
             "agent_error",
             "ambiguous_card",
-            "human_requested"
+            "human_requested",
+            "gate_failed"
           ]
         },
         "detail": {
@@ -163,6 +164,23 @@
     },
     "created_at": {
       "$ref": "common.schema.json#/$defs/iso_datetime"
+    },
+    "awaiting": {
+      "description": "Set while phase is awaiting_human: what the human must approve and where the flow goes next.",
+      "type": "object",
+      "required": ["what", "next"],
+      "additionalProperties": false,
+      "properties": {
+        "what": { "enum": ["plan", "grouping", "jira_actions"] },
+        "next": { "$ref": "#/$defs/phase" },
+        "detail": { "type": "string" }
+      }
+    },
+    "dispute_iterations": {
+      "description": "Iterations in which Toph already handled tests disputed by Aang (at most once each).",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "integer", "minimum": 1 }
     },
     "usage_total": {
       "description": "Sum of history[].usage.credits for this card.",
@@ -233,6 +251,10 @@
     }
   },
   "allOf": [
+    {
+      "if": { "properties": { "phase": { "const": "awaiting_human" } } },
+      "then": { "required": ["awaiting"] }
+    },
     {
       "if": {
         "properties": {

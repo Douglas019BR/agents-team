@@ -45,13 +45,19 @@ class AdapterError(ValueError):
 
 @dataclass(frozen=True)
 class RunContext:
-    """Everything that varies per target repository and card."""
+    """Everything that varies per target repository and card.
+
+    ``outputs`` are the exact artifact paths (or globs) this run may write. The ``artifacts``
+    write scope resolves to them, never to the whole card directory, so an agent cannot overwrite
+    another agent's report.
+    """
 
     worktree: Path
     card_dir: Path
     repo_config: dict[str, Any]
     team_models: dict[str, Any] = field(default_factory=dict)
     teaching_dir: Path | None = None
+    outputs: tuple[str, ...] = ()
 
 
 def agent_name(agent: AgentDefinition, phase: str) -> str:
@@ -87,14 +93,17 @@ def shell_patterns(agent: AgentDefinition, ctx: RunContext) -> list[str]:
     return list(dict.fromkeys(patterns))
 
 
-def resolve_scopes(scopes: list[str], ctx: RunContext) -> list[str]:
+def resolve_scopes(scopes: list[str], ctx: RunContext, allow: bool = True) -> list[str]:
     paths = ctx.repo_config.get("paths", {})
     out: list[str] = []
     for scope in scopes:
         if scope == "repo":
             out.append(f"{ctx.worktree}/**")
         elif scope == "artifacts":
-            out.append(f"{ctx.card_dir}/**")
+            if allow:
+                out += [str(o) for o in ctx.outputs]
+            else:
+                out.append(f"{ctx.card_dir}/**")
         elif scope == "teaching":
             if ctx.teaching_dir is None:
                 raise AdapterError("teaching scope requested but no teaching_dir")
@@ -129,7 +138,7 @@ def render(agent: AgentDefinition, phase: str, ctx: RunContext, prompt_path: Pat
         tools.append("write")
         settings["write"] = {
             "allowedPaths": write_allowed,
-            "deniedPaths": resolve_scopes(perms.get("deny_write", []), ctx) + always_denied(ctx),
+            "deniedPaths": resolve_scopes(perms.get("deny_write", []), ctx, allow=False) + always_denied(ctx),
         }
     if shell:
         tools.append("shell")
@@ -222,6 +231,7 @@ def main(argv: list[str] | None = None) -> int:
         repo_config=load(args.config),
         team_models=team.get("models", {}),
         teaching_dir=args.teaching_dir.resolve() if args.teaching_dir else None,
+        outputs=(f"{args.card_dir.resolve()}/**",),  # preview only; real runs pass exact files
     )
     failed = 0
     for agent in load_all().values():

@@ -80,8 +80,9 @@ Goal: make Toph's tests pass without changing them, following your plan.
 4. If you must deviate from the plan, do it, and record the deviation and the reason in
    `change-summary.md`.
 5. If a test from Toph looks wrong (contradicts the card or the plan, or is impossible to satisfy),
-   do not edit it. Leave it failing, and add the case to `change-summary.md` under
-   `## Disputed tests` with the test id and your reasoning. The orchestrator routes it to Toph.
+   do not edit it. Leave it failing, and list it in `change-summary.md` under `## Disputed tests`,
+   one bullet per test: `- <test id>: <reasoning>`. The orchestrator routes bullets in that section
+   to Toph, so when nothing is disputed leave the section empty (no bullets).
 6. Fixing findings: address every blocking finding owned by `aang-dev`. Remove the matching
    `AGENT-NOTE` in the same commit. For a finding you disagree with, keep the note, append your
    reply to it, and explain under `## Disputed findings`.

@@ -12,6 +12,9 @@ dependencies = [
 [dependency-groups]
 dev = ["pytest>=8"]
 
+[project.scripts]
+agents-team = "agents_team.cli:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

@@ -336,6 +336,43 @@ do KiroCrew (`kirocrew agent create`).
   (`GITLAB_READ_ONLY_MODE=true`). O bot `@devops.n8n` do GitLab é um sistema à parte e não faz parte
   do agents-team.
 
+## 8.2 Orquestrador (`implement-system`)
+
+CLI: `agents-team start | run | approve | retry | status` (`orchestrator/agents_team/cli.py`).
+`run` avança o cartão até uma pausa humana (`awaiting_human`) ou um estado final.
+
+```
+created → plan → plan_review ─┬─ approve ──[plan_approval: human?]──→ sdet (write_tests)
+                              └─ request_changes (1x) → plan
+sdet → dev ─┬─ testes contestados (1x por iteração) → sdet (fix_tests) → dev
+            └─→ review → qa_sec (Katara ∥ Zuko) → consolidate
+consolidate ─┬─ tudo approve → grouping_plan → [humano] → assemble → final_gates
+             ├─ iteração < 3 → AGENT-NOTEs + commit do orquestrador → sdet (achado da Toph) ou dev
+             └─ iteração 3 → escalated
+final_gates → [humano, se houver jira_actions] → jira_sync → done
+```
+
+Verificações do orquestrador a cada execução de agente (defesa em camadas sobre as permissões do
+Kiro):
+- **Saídas:** existem e validam (schema, card, flow, stage, iteration, nome e papel do agente). Uma
+  nova tentativa com os erros; depois, escala. O modelo gravado no relatório é o que de fato rodou.
+- **Integridade:** nenhum outro arquivo do diretório do cartão muda (hash antes/depois). Um agente
+  não consegue editar o relatório de outro nem o `state.json`.
+- **Escopo no repositório:** commits e alterações só nos globs da fase; agentes só leitura não alteram
+  nada; commits com prefixo errado escalam. Mudanças deixadas sem commit dentro do escopo são
+  commitadas pelo orquestrador com o prefixo do agente; lixo gerado (`__pycache__`, caches) nunca é
+  commitado e é removido da branch oficial.
+- **Retomada:** cada transição é gravada antes da próxima fase; uma execução interrompida recomeça da
+  fase atual. `retry` reexecuta a fase que escalou (exceto `max_iterations`).
+
+Simplificações desta versão:
+- As transições estão em código (`engine.py`), não em `workflows/*.yml`. Um arquivo declarativo só
+  vale a pena quando houver mais fluxos que compartilhem o motor.
+- A branch oficial recebe **um** commit (squash) com mensagem editável no `grouping-plan.md`.
+  Agrupamento em vários commits lógicos fica para depois.
+- `jira_sync` exporta o lote aprovado em `jira-actions.approved.json`; aplicar via MCP da Atlassian é o
+  próximo incremento.
+
 ## 9. Avaliação
 
 **Custo por execução:** o kiro-cli informa créditos e tempo por execução (`▸ Credits: X • Time: Ys`)
