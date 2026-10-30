@@ -5,8 +5,8 @@ import pytest
 from agents_team.agents import AgentDefinitionError, load_all, parse
 from agents_team.schemas import SCHEMAS_DIR, load
 
-EXPECTED = {"aang", "toph", "sokka", "katara", "zuko", "uncle-iroh"}
-REVIEWERS = {"sokka", "katara", "zuko", "uncle-iroh"}
+EXPECTED = {"aang", "toph", "sokka", "katara", "zuko", "uncle-iroh", "discovery"}
+READ_ONLY = {"sokka", "katara", "zuko", "uncle-iroh", "discovery"}
 
 
 @pytest.fixture(scope="module")
@@ -22,7 +22,7 @@ def test_only_dev_and_sdet_commit(agents):
     assert {n for n, a in agents.items() if a.meta["permissions"]["git_commit"]} == {"aang", "toph"}
 
 
-@pytest.mark.parametrize("name", sorted(REVIEWERS))
+@pytest.mark.parametrize("name", sorted(READ_ONLY))
 def test_read_only_agents_cannot_write_repo(agents, name):
     perms = agents[name].meta["permissions"]
     assert "repo" in perms["deny_write"]
@@ -123,4 +123,16 @@ def test_rejects_commit_flag_mismatch(tmp_path):
 def test_rejects_mcp_write(tmp_path):
     front = BASE.format(name="x", write="{}", shell="git:diff", commit="false").replace("mcp: {}", "mcp: {jira: write}")
     with pytest.raises(AgentDefinitionError):
+        parse(_write(tmp_path, "x", front))
+
+
+def test_discovery_prompt_includes_skill(agents):
+    prompt = agents["discovery"].prompt()
+    assert "# agents-team discovery" in prompt
+    assert "name: agents-team-discovery" not in prompt  # skill frontmatter stripped
+
+
+def test_rejects_missing_skill(tmp_path):
+    front = BASE.format(name="x", write="{}", shell="git:diff", commit="false") + "skills: [nope]\n"
+    with pytest.raises(AgentDefinitionError, match="skill"):
         parse(_write(tmp_path, "x", front))

@@ -10,63 +10,134 @@
     },
     "role": {
       "type": "string",
-      "enum": ["sdet", "dev", "reviewer", "qa", "sec", "teacher", "orchestrator"]
+      "enum": [
+        "sdet",
+        "dev",
+        "reviewer",
+        "qa",
+        "sec",
+        "teacher",
+        "discovery",
+        "orchestrator"
+      ]
     },
     "agent_ref": {
       "type": "object",
-      "required": ["name", "role", "model"],
+      "required": [
+        "name",
+        "role",
+        "model"
+      ],
       "additionalProperties": false,
       "properties": {
-        "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
-        "role": { "$ref": "#/$defs/role" },
-        "model": { "type": "string", "minLength": 1 },
-        "version": { "description": "Version of the agent's canonical definition.", "type": "string" }
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "role": {
+          "$ref": "#/$defs/role"
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "description": "Version of the agent's canonical definition.",
+          "type": "string"
+        }
       }
     },
     "severity": {
       "type": "string",
-      "enum": ["info", "low", "medium", "high", "critical"]
+      "enum": [
+        "info",
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ]
     },
     "verdict": {
       "type": "string",
-      "enum": ["approve", "request_changes", "block"]
+      "enum": [
+        "approve",
+        "request_changes",
+        "block"
+      ]
     },
     "flow": {
       "type": "string",
-      "enum": ["implement-system", "bdd-behave", "peer-review"]
+      "enum": [
+        "implement-system",
+        "bdd-behave",
+        "peer-review"
+      ]
     },
-    "iso_datetime": { "type": "string", "format": "date-time" },
+    "iso_datetime": {
+      "type": "string",
+      "format": "date-time"
+    },
     "jira_action": {
       "description": "Jira action declared by an agent. Only the orchestrator applies it, after human confirmation.",
       "type": "object",
-      "required": ["type"],
+      "required": [
+        "type"
+      ],
       "oneOf": [
         {
           "properties": {
-            "type": { "const": "comment" },
-            "body": { "type": "string", "minLength": 1 }
+            "type": {
+              "const": "comment"
+            },
+            "body": {
+              "type": "string",
+              "minLength": 1
+            }
           },
-          "required": ["type", "body"],
+          "required": [
+            "type",
+            "body"
+          ],
           "additionalProperties": false
         },
         {
           "properties": {
-            "type": { "const": "update_field" },
-            "field": { "type": "string", "minLength": 1 },
+            "type": {
+              "const": "update_field"
+            },
+            "field": {
+              "type": "string",
+              "minLength": 1
+            },
             "set": {},
-            "add": { "type": "array" },
-            "remove": { "type": "array" }
+            "add": {
+              "type": "array"
+            },
+            "remove": {
+              "type": "array"
+            }
           },
-          "required": ["type", "field"],
+          "required": [
+            "type",
+            "field"
+          ],
           "minProperties": 3,
           "additionalProperties": false
         },
         {
           "properties": {
-            "type": { "const": "transition" },
-            "to": { "type": "string", "minLength": 1 }
+            "type": {
+              "const": "transition"
+            },
+            "to": {
+              "type": "string",
+              "minLength": 1
+            }
           },
-          "required": ["type", "to"],
+          "required": [
+            "type",
+            "to"
+          ],
           "additionalProperties": false
         }
       ]

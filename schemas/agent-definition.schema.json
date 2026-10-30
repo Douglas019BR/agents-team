@@ -4,78 +4,154 @@
   "title": "agents-team: canonical agent definition (frontmatter of agents/<name>.md)",
   "description": "Harness-neutral. Adapters translate it into each harness's native format. Scopes reference .agents-team.yml keys (paths.*, commands.*) so they resolve per target repo.",
   "type": "object",
-  "required": ["name", "role", "version", "description", "invocation", "phases", "permissions", "inputs", "outputs"],
+  "required": [
+    "name",
+    "role",
+    "version",
+    "description",
+    "invocation",
+    "phases",
+    "permissions",
+    "inputs",
+    "outputs"
+  ],
   "additionalProperties": false,
   "properties": {
-    "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
-    "display_name": { "type": "string" },
-    "role": { "$ref": "common.schema.json#/$defs/role" },
-    "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
-    "description": { "type": "string", "minLength": 1 },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "display_name": {
+      "type": "string"
+    },
+    "role": {
+      "$ref": "common.schema.json#/$defs/role"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
     "invocation": {
       "description": "orchestrator = called by a workflow; human = only by direct user request.",
-      "enum": ["orchestrator", "human"]
+      "enum": [
+        "orchestrator",
+        "human"
+      ]
     },
     "phases": {
       "description": "Phases this agent runs in. Each phase may get its own model in team config.",
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
-      "items": { "type": "string", "pattern": "^[a-z][a-z_]*$" }
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z_]*$"
+      }
     },
     "flows": {
       "type": "array",
       "uniqueItems": true,
-      "items": { "$ref": "common.schema.json#/$defs/flow" }
+      "items": {
+        "$ref": "common.schema.json#/$defs/flow"
+      }
     },
     "default_model": {
       "description": "Fallback when team config has no entry. String or per-phase map.",
       "oneOf": [
-        { "type": "string" },
-        { "type": "object", "additionalProperties": { "type": "string" } }
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
       ]
     },
     "permissions": {
       "type": "object",
-      "required": ["read", "write", "shell", "git_commit", "mcp"],
+      "required": [
+        "read",
+        "write",
+        "shell",
+        "git_commit",
+        "mcp"
+      ],
       "additionalProperties": false,
       "properties": {
-        "read": { "$ref": "#/$defs/scopes" },
+        "read": {
+          "$ref": "#/$defs/scopes"
+        },
         "write": {
           "description": "Per-phase write scopes. Missing phase = no repo writes.",
           "type": "object",
-          "additionalProperties": { "$ref": "#/$defs/scopes" }
+          "additionalProperties": {
+            "$ref": "#/$defs/scopes"
+          }
         },
-        "deny_write": { "$ref": "#/$defs/scopes" },
+        "deny_write": {
+          "$ref": "#/$defs/scopes"
+        },
         "shell": {
           "description": "Allowed commands: commands.* keys, security.tools, or literal git subcommands (git:status, git:diff, ...).",
           "type": "array",
           "uniqueItems": true,
-          "items": { "type": "string", "pattern": "^(commands\\.[a-z_]+|security\\.tools|git:[a-z-]+)$" }
+          "items": {
+            "type": "string",
+            "pattern": "^(commands\\.[a-z_]+|security\\.tools|git:[a-z-]+)$"
+          }
         },
-        "git_commit": { "type": "boolean" },
+        "git_commit": {
+          "type": "boolean"
+        },
         "mcp": {
           "description": "MCP servers and access level. Agents never get write access to external systems.",
           "type": "object",
-          "additionalProperties": { "const": "read" }
+          "additionalProperties": {
+            "const": "read"
+          }
         }
       }
     },
-    "inputs": { "$ref": "#/$defs/artifacts" },
-    "outputs": { "$ref": "#/$defs/artifacts" }
+    "inputs": {
+      "$ref": "#/$defs/artifacts"
+    },
+    "outputs": {
+      "$ref": "#/$defs/artifacts"
+    },
+    "skills": {
+      "description": "Skills under skills/<name>/SKILL.md appended to the prompt.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*$"
+      }
+    }
   },
   "$defs": {
     "scopes": {
       "description": "repo, artifacts, teaching, or a .agents-team.yml path key (paths.tests, ...).",
       "type": "array",
       "uniqueItems": true,
-      "items": { "type": "string", "pattern": "^(repo|artifacts|teaching|paths\\.[a-z_]+)$" }
+      "items": {
+        "type": "string",
+        "pattern": "^(repo|artifacts|teaching|paths\\.[a-z_]+)$"
+      }
     },
     "artifacts": {
       "description": "Artifact file names under cards/<CARD>/ (iteration files are relative to iterations/NN/).",
       "type": "array",
       "uniqueItems": true,
-      "items": { "type": "string", "pattern": "^[a-z0-9._-]+\\.(md|json)$" }
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9._-]+\\.(md|json|ya?ml)$"
+      }
     }
   }
 }

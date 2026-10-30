@@ -176,6 +176,23 @@ def command(agent: AgentDefinition, phase: str, ctx: RunContext, task: str) -> l
     ]
 
 
+USAGE_RE = re.compile(r"Credits:\s*([0-9]+(?:\.[0-9]+)?)\s*\W+\s*Time:\s*([0-9]+(?:\.[0-9]+)?)s")
+ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]")
+
+
+def parse_usage(output: str) -> dict[str, float] | None:
+    """Credits and wall time from kiro-cli's trailing ``Credits: X • Time: Ys`` line.
+
+    kiro-cli exposes credits per run but no token counts. When a run prints several
+    summaries, the last one is the run total.
+    """
+    matches = USAGE_RE.findall(ANSI_RE.sub("", output))
+    if not matches:
+        return None
+    credits, seconds = matches[-1]
+    return {"credits": float(credits), "seconds": float(seconds)}
+
+
 def validate_with_kiro(config_path: Path) -> tuple[bool, str]:
     if shutil.which("kiro-cli") is None:
         return False, "kiro-cli not found"

@@ -65,8 +65,20 @@ negativos).
 O orquestrador classifica o cartão do Jira pelo tipo de issue ou pelas labels. Se o cartão for
 ambíguo, classifica com o LLM e pede confirmação humana antes de começar.
 
-Todos os fluxos começam pela **skill de discovery**: se o repositório-alvo não tiver
-`.agents-team.yml`, ela detecta a stack, gera o arquivo e o adiciona a `.git/info/exclude`.
+Todos os fluxos começam pela **discovery** quando o repositório-alvo não tem `.agents-team.yml`:
+
+1. `agents_team.discovery facts` (determinístico) coleta arquivos de configuração, scanners e
+   executáveis instalados, remote e branch padrão em `discovery-facts.json`.
+2. O agente `discovery` (skill `skills/discovery/SKILL.md`, baseada na `generate-forge-guidelines`)
+   lê o repositório e propõe `agents-team.yml` e `conventions.md` no diretório de estado. Ele não
+   escreve no repositório. Se o projeto já tem `FORGE_GUIDELINES.md`, o `conventions.md` aponta para
+   ele em vez de duplicar.
+3. `agents_team.discovery check` valida a proposta: schema, comandos sem caracteres de controle,
+   executáveis existentes, globs sem sobreposição entre `source`/`tests` e `features`/`steps`,
+   scanners instalados.
+4. O humano confirma, e `agents_team.discovery apply` copia `.agents-team.yml` para o repositório,
+   `conventions.md` para `memory/`, e adiciona `/.agents-team.yml` e `/.kiro/` ao `.git/info/exclude`
+   (compartilhado entre worktrees). Nunca sobrescreve sem `--force`.
 
 ### 3.1 Implementar sistema
 
@@ -325,6 +337,11 @@ do KiroCrew (`kirocrew agent create`).
   do agents-team.
 
 ## 9. Avaliação
+
+**Custo por execução:** o kiro-cli informa créditos e tempo por execução (`▸ Credits: X • Time: Ys`)
+mas não expõe tokens (a documentação do Kiro confirma que contagem de tokens por sessão não está
+disponível). O runner registra `usage` em cada entrada do `history` do `state.json` e soma em
+`usage_total`. Os campos `tokens_in`/`tokens_out` existem no schema para harnesses que os expõem.
 
 `evals/` guarda cenários com problemas plantados: bugs, vulnerabilidades conhecidas, testes fracos
 e `AGENT-NOTE` esquecidos. Eles rodam no CI do próprio agents-team para detectar regressão quando um

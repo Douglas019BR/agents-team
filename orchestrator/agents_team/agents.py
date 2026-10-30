@@ -12,6 +12,7 @@ from .schemas import errors
 
 AGENTS_DIR = Path(__file__).resolve().parents[2] / "agents"
 SHARED_FILE = AGENTS_DIR / "_shared.md"
+SKILLS_DIR = AGENTS_DIR.parent / "skills"
 
 
 class AgentDefinitionError(ValueError):
@@ -42,8 +43,21 @@ class AgentDefinition:
         raise AgentDefinitionError(f"{self.name}: no model for phase '{phase}'")
 
     def prompt(self) -> str:
-        """Full prompt: shared conventions followed by the agent's own instructions."""
-        return SHARED_FILE.read_text(encoding="utf-8").rstrip() + "\n\n" + self.body.lstrip()
+        """Full prompt: shared conventions, the agent's instructions, then its skills."""
+        parts = [SHARED_FILE.read_text(encoding="utf-8").rstrip(), self.body.strip()]
+        for skill in self.meta.get("skills", []):
+            parts.append(_skill_body(skill))
+        return "\n\n".join(parts) + "\n"
+
+
+def _skill_body(name: str) -> str:
+    path = SKILLS_DIR / name / "SKILL.md"
+    if not path.exists():
+        raise AgentDefinitionError(f"skill '{name}' not found at {path}")
+    text = path.read_text(encoding="utf-8")
+    if text.startswith("---\n"):
+        text = text.split("---\n", 2)[2]
+    return text.strip()
 
 
 def parse(path: Path) -> AgentDefinition:
@@ -79,6 +93,9 @@ def _consistency(meta: dict[str, Any], path: Path) -> list[str]:
     perms = meta.get("permissions", {})
     if any(cmd.startswith("git:commit") for cmd in perms.get("shell", [])) != perms.get("git_commit", False):
         problems.append("git:commit in shell must match git_commit")
+    for skill in meta.get("skills", []):
+        if not (SKILLS_DIR / skill / "SKILL.md").exists():
+            problems.append(f"skill '{skill}' not found")
     return problems
 
 

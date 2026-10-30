@@ -134,3 +134,10 @@ def test_team_config_model_map_must_not_be_empty():
     team = load(EXAMPLES / "team-config.yml")
     team["models"]["aang"] = {}
     assert errors("team-config", team)
+
+
+def test_history_usage(state):
+    state["history"][-1]["usage"] = {"model": "glm-5", "credits": 1.07, "seconds": 38}
+    assert errors("state", state) == []
+    state["history"][-1]["usage"]["credits"] = -1
+    assert errors("state", state)

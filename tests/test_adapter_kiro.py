@@ -171,3 +171,9 @@ def test_generated_configs_pass_kiro_validate(agents, ctx, tmp_path):
         for phase in agent.phases:
             ok, output = kiro.validate_with_kiro(kiro.write_bundle(agent, phase, ctx, tmp_path / "out"))
             assert ok, output
+
+
+def test_parse_usage_takes_last_summary():
+    out = "turn 1\n ▸ Credits: 0.40 • Time: 12s\n\x1b[?25lmore\n ▸ Credits: 1.07 • Time: 38s\n"
+    assert kiro.parse_usage(out) == {"credits": 1.07, "seconds": 38.0}
+    assert kiro.parse_usage("no summary") is None

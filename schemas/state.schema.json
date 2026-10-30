@@ -164,6 +164,11 @@
     "created_at": {
       "$ref": "common.schema.json#/$defs/iso_datetime"
     },
+    "usage_total": {
+      "description": "Sum of history[].usage.credits for this card.",
+      "type": "number",
+      "minimum": 0
+    },
     "updated_at": {
       "$ref": "common.schema.json#/$defs/iso_datetime"
     },
@@ -204,6 +209,18 @@
           },
           "note": {
             "type": "string"
+          },
+          "usage": {
+            "description": "Cost of the agent run that ended this phase, as reported by the harness.",
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "model": { "type": "string" },
+              "credits": { "type": "number", "minimum": 0 },
+              "seconds": { "type": "number", "minimum": 0 },
+              "tokens_in": { "type": "integer", "minimum": 0 },
+              "tokens_out": { "type": "integer", "minimum": 0 }
+            }
           }
         }
       }
