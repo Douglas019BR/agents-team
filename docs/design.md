@@ -9,8 +9,8 @@ implementação de qualquer agente.
 
 ## 1. Princípios
 
-1. **Tudo local.** Os agentes trabalham só na máquina do usuário. Nada vai para o GitLab nem para o Jira
-   sem uma ação humana.
+1. **Tudo local.** Os agentes trabalham só na máquina do usuário. Nada vai para o GitLab sem uma ação
+   humana. No Jira, só o orquestrador escreve (seção 7).
 2. **Push e MR são sempre humanos.** Os agentes apenas commitam localmente.
 3. **Portabilidade.** As definições canônicas são neutras. Cada harness recebe adaptadores finos
    gerados a partir delas.
@@ -68,7 +68,7 @@ Toph (.feature em Gherkin a partir dos critérios de aceite)
   → consolidação → branch oficial → humano
 ```
 
-### 3.3 Revisão de MRs de pares (PROPOSTA, a confirmar)
+### 3.3 Revisão de MRs de pares
 
 Esta é a revisão que você faz nos MRs dos colegas. Os agentes preparam um rascunho. Você decide o que
 publicar.
@@ -225,7 +225,18 @@ commits:
 
 ## 7. Ferramentas e permissões
 
-- As ferramentas externas chegam via MCP: Jira (leitura de cartões) e GitLab (leitura de MRs).
+- As ferramentas externas chegam via MCP: Jira e GitLab (leitura de MRs, sempre somente leitura).
+- **Escrita no Jira: só o orquestrador.** Os agentes não acessam o Jira para escrever. Cada agente
+  declara no seu artefato, no campo `jira_actions`, o que precisa ser comentado ou editado. O
+  orquestrador consolida essas ações, **mostra o lote ao humano e só aplica depois da confirmação**.
+  A escrita acontece por uma invocação do harness com o MCP da Atlassian (sem token novo).
+
+  ```json
+  "jira_actions": [
+    { "type": "comment", "body": "..." },
+    { "type": "update_field", "field": "labels", "add": ["needs-design-review"] }
+  ]
+  ```
 - Os scanners de segurança usados são os que estiverem instalados localmente.
 - Permissões por papel, conforme a seção 2: só a Toph e o Aang escrevem e commitam. Os demais apenas leem,
   executam testes e ferramentas, e escrevem artefatos e `AGENT-NOTE`.
@@ -236,8 +247,37 @@ commits:
   entradas e saídas, seguido das instruções em Markdown).
 - Padrões abertos são o alvo quando servem: `AGENTS.md` e Agent Skills (`SKILL.md`).
 - `adapters/<harness>/` gera o formato nativo de cada harness a partir da fonte canônica.
-- O orquestrador é local e executa os workflows definidos em arquivo, como máquinas de estado. O harness
-  só fornece a execução de cada papel.
+- O orquestrador é local, **escrito em Python**, e executa os workflows definidos em arquivo, como
+  máquinas de estado. O harness só fornece a execução de cada papel, por meio de um **runner** por
+  harness (interface única: papel, prompt, diretório de trabalho e modelo; retorna o resultado e o
+  caminho do artefato).
+
+### 8.1 Primeiro adaptador: Kiro / KiroCrew
+
+Baseado no formato de agente do Kiro CLI 2.19 (`~/.kiro/agents/<nome>.json`) e no registro de agentes
+do KiroCrew (`kirocrew agent create`).
+
+| Canônico (`agents/<papel>.md`) | Kiro (`<nome>.json`)                                  |
+|--------------------------------|-------------------------------------------------------|
+| corpo Markdown (instruções)    | `prompt: file://.../<nome>-prompt.md`                 |
+| `tools`                        | `tools`, `allowedTools`                               |
+| caminhos graváveis             | `toolsSettings.write.allowedPaths` / `deniedPaths`    |
+| comandos permitidos            | `toolsSettings.shell.allowedCommands`, `denyByDefault` |
+| `model`                        | `model`                                               |
+| servidores MCP                 | `mcpServers`                                          |
+
+- O adaptador gera os arquivos em `~/.kiro/agents/` e registra cada papel no KiroCrew com
+  `kirocrew agent create --name <nome> --kiro-agent <nome>`.
+- **Runner Kiro:** `kiro-cli chat --no-interactive --agent <nome> --model <modelo> --trust-tools=<lista>`,
+  executado no worktree do cartão. A lista de `--trust-tools` sai da definição canônica, nunca de
+  `--trust-all-tools`.
+- Os limites de escrita da Toph (só caminhos de teste) e do Aang (sem tocar nos testes da Toph) são
+  impostos por `toolsSettings.write`. A verificação do Sokka pelo diff continua como segunda camada.
+- **Entrada no KiroCrew:** um agente `agents-team` no dashboard recebe o pedido em linguagem natural
+  ("implementa PROJ-123", "revisa este MR") e chama o CLI do orquestrador.
+- O fluxo 3.3 é construído do zero, com o MCP do GitLab em modo somente leitura
+  (`GITLAB_READ_ONLY_MODE=true`). O bot `@devops.n8n` do GitLab é um sistema à parte e não faz parte
+  do agents-team.
 
 ## 9. Avaliação
 
@@ -263,10 +303,15 @@ agents-team/
 
 ## 11. Questões em aberto
 
-1. Confirmar o fluxo 3.3 (revisão de MRs de pares), incluindo a participação da Toph nele.
-2. Os agentes podem escrever no Jira (comentar, mudar status), ou o Jira também é só leitura?
-3. Linguagem do orquestrador (Python, por afinidade com behave?) e se ele usa um framework ou é
-   código próprio mínimo.
-4. Qual harness recebe o primeiro adaptador.
-5. Mapeamento padrão de modelo por papel.
-6. Licença do repositório.
+1. Mapeamento padrão de modelo por papel.
+2. Licença do repositório.
+
+## 12. Registro de decisões
+
+- 2026-10-30: fluxo 3.3 confirmado; escrita no Jira só pelo orquestrador, via `jira_actions`;
+  orquestrador em Python; primeiro adaptador para Kiro/KiroCrew.
+- 2026-10-30: `jira_actions` só são aplicadas após confirmação humana, via MCP da Atlassian;
+  orquestrador com código próprio mínimo, sem framework; fluxo 3.3 construído do zero (sem reaproveitar
+  o agente `mr-reviewer`; o bot `@devops.n8n` é um sistema à parte).
+- Ordem de implementação: schemas → definições canônicas dos agentes → adaptador Kiro → skill de
+  discovery → orquestrador → evals.
