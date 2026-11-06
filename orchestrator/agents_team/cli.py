@@ -76,6 +76,7 @@ def _discover(args: argparse.Namespace, engine: Engine) -> int:
         f"- Facts: {facts_path}",
         f"- Existing config (read-only input): {existing if existing.exists() else 'none'}",
         f"- Write exactly: {out / 'agents-team.yml'} and {out / 'conventions.md'}",
+        *([f"- Human guidance (treat as a constraint, it overrides your own scoping): {args.focus}"] if args.focus else []),
     ])
     tracked_before = gitops.status(repo)[0]
     result = engine.runner.run(RunRequest(agent, "discover", task, ctx, out / "discovery.log"))
@@ -107,6 +108,7 @@ def main(argv: list[str] | None = None) -> int:
 
     d = sub.add_parser("discover", help="propose .agents-team.yml for a repository (writes only to the state dir)")
     d.add_argument("--repo", type=Path, default=Path("."))
+    d.add_argument("--focus", help="free-text guidance, e.g. 'only the Python harness in integrationtests/'")
     da = sub.add_parser("discover-apply", help="copy the approved proposal into the repository (git-excluded)")
     da.add_argument("--repo", type=Path, default=Path("."))
     da.add_argument("--force", action="store_true", help="replace an existing .agents-team.yml")

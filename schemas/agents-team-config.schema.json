@@ -168,17 +168,40 @@
       "additionalProperties": false,
       "properties": {
         "convention": {
+          "description": "conventional: 'feat: title'. ticket-dash: '<CARD> - title'. free: title only.",
           "enum": [
             "conventional",
+            "ticket-dash",
             "free"
           ],
           "default": "conventional"
+        },
+        "trailers": {
+          "description": "Add Agent-Authors/Agent-Reviewed trailers to the official commit message.",
+          "type": "boolean",
+          "default": true
         },
         "scopes": {
           "type": "array",
           "items": {
             "type": "string"
           }
+        }
+      }
+    },
+    "branches": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "base": {
+          "description": "Branch every card starts from (default: the current branch of the repository).",
+          "type": "string",
+          "minLength": 1
+        },
+        "official": {
+          "description": "Name of the official branch; {card} and {slug} are replaced. Default: feature/{card}-{slug}.",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._{}/-]+$"
         }
       }
     },

@@ -425,3 +425,44 @@ def test_concurrent_run_is_refused(tmp_path, repo):
     lock.write_text("999999999")  # stale lock from a dead process is taken over
     assert engine.run(rid, CARD)["awaiting"]["what"] == "grouping"
     assert not lock.exists()
+
+
+def _set_cfg(repo, **updates):
+    cfg = yaml.safe_load((repo / ".agents-team.yml").read_text())
+    cfg.update(updates)
+    (repo / ".agents-team.yml").write_text(yaml.safe_dump(cfg))
+
+
+def test_branch_name_base_and_commit_format_from_config(tmp_path, repo):
+    sh(repo, "branch", "development")
+    sh(repo, "switch", "-q", "-c", "other-work")  # the user's current branch must not become the base
+    (repo / "src" / "other.py").write_text("x = 1\n")
+    commit(repo, "wip", "unrelated work on the current branch")
+    _set_cfg(repo, branches={"base": "development", "official": "{card}"},
+             commits={"convention": "ticket-dash", "trailers": False})
+    engine, rid = started(tmp_path, repo, FakeRunner())
+    state = engine.status(rid, CARD)
+    assert state["branches"] == {"base": "development", "work": "agents/QAPC-42/work", "official": "QAPC-42"}
+    assert not (Path(state["worktree"]) / "src" / "other.py").exists()  # branched from development
+
+    engine.run(rid, CARD)
+    plan = (tmp_path / "home" / "repos" / rid / "cards" / CARD / "grouping-plan.md").read_text()
+    assert "```text\nQAPC-42 - Validar token expirado\n```" in plan  # no Refs, no trailers
+    engine.approve(rid, CARD)
+    state = engine.run(rid, CARD)
+    wt = Path(state["worktree"])
+    assert sh(wt, "branch", "--show-current") == "QAPC-42"
+    assert sh(wt, "log", "-1", "--format=%B", "QAPC-42") == "QAPC-42 - Validar token expirado"
+    assert sh(wt, "rev-list", "--count", "development..QAPC-42") == "1"
+    assert sh(repo, "branch", "--show-current") == "other-work"  # the user's checkout never moved
+
+
+def test_start_rejects_unknown_base_and_existing_official_branch(tmp_path, repo):
+    _set_cfg(repo, branches={"base": "nope"})
+    with pytest.raises(EngineError, match="does not exist"):
+        make_engine(tmp_path, FakeRunner()).start(repo, CARD, CARD_MD)
+    _set_cfg(repo, branches={"base": "main", "official": "{card}"})
+    sh(repo, "branch", CARD)
+    with pytest.raises(EngineError, match="already exists"):
+        make_engine(tmp_path, FakeRunner()).start(repo, CARD, CARD_MD)
+    assert not (tmp_path / "home" / "repos" / "grp-target" / "cards" / CARD).exists()  # nothing half-created

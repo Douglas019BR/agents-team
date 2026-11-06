@@ -142,9 +142,17 @@ class Engine:
         store = CardStore(card_dir)
         if store.exists():
             raise EngineError(f"card {card} already started at {card_dir}")
-        base = base or gitops.git(repo, "branch", "--show-current") or "main"
+        base = base or cfg.get("branches", {}).get("base") or gitops.git(repo, "branch", "--show-current") or "main"
         title = card_title(card_md, card)
-        work, official = f"agents/{card}/work", f"feature/{card}-{slug or slugify(title)}"
+        official_pattern = cfg.get("branches", {}).get("official", "feature/{card}-{slug}")
+        official = official_pattern.format(card=card, slug=slug or slugify(title)).strip("-")
+        work = f"agents/{card}/work"
+        if official == work or official.startswith(f"{work}/") or work.startswith(f"{official}/"):
+            raise EngineError(f"official branch {official!r} conflicts with work branch {work!r}")
+        if not gitops.branch_exists(repo, base):
+            raise EngineError(f"base branch {base!r} does not exist in {repo}")
+        if gitops.branch_exists(repo, official):
+            raise EngineError(f"official branch {official!r} already exists in {repo}; pick another with `branches.official` or --slug")
         worktree = self.layout.worktree(rid, card)
 
         card_dir.mkdir(parents=True, exist_ok=True)
@@ -370,12 +378,17 @@ class Engine:
         card_md = (store.card_dir / "card.md").read_text(encoding="utf-8")
         cfg = self._repo_config(store)
         title = card_title(card_md, state["card"])
-        subject = f"feat: {title}" if cfg.get("commits", {}).get("convention", "conventional") == "conventional" else title
+        commits_cfg = cfg.get("commits", {})
+        convention = commits_cfg.get("convention", "conventional")
+        subject = {"conventional": f"feat: {title}", "ticket-dash": f"{state['card']} - {title}"}.get(convention, title)
         authors = sorted({s.split(":", 1)[0] for _, s in gitops.commits(worktree, branches["base"], branches["work"])
                           if s.split(":", 1)[0] in {"aang-dev", "toph-sdet"}})
-        message = (f"{subject}\n\nRefs: {state['card']}\n\n"
-                   f"Agent-Authors: {', '.join(authors) or 'none'}\n"
-                   f"Agent-Reviewed: sokka-reviewer, katara-qa, zuko-sec\n")
+        message = f"{subject}\n"
+        if convention != "ticket-dash":
+            message += f"\nRefs: {state['card']}\n"
+        if commits_cfg.get("trailers", True):
+            message += (f"\nAgent-Authors: {', '.join(authors) or 'none'}\n"
+                        f"Agent-Reviewed: sokka-reviewer, katara-qa, zuko-sec\n")
         files = [f for f in gitops.changed_files(worktree, branches["base"], branches["work"])
                  if not globs.match_any(f, JUNK)]
         plan = (f"# Grouping plan: {state['card']}\n\n"
