@@ -84,21 +84,29 @@ def install(agents_dir: Path, layout: Layout, source_config: Path | None, regist
     extra = (f"\n\n## Locations\n\n- agents-team repository: `{REPO_ROOT}`\n- state root: `{layout.root}` "
              f"(cards: `repos/<repo-id>/cards/<CARD>/`; worktrees: `worktrees/`)\n"
              f"- save explanations only to: `{layout.root / 'teaching'}`\n")
-    path = kiro.write_bundle(iroh, "teach", ctx, agents_dir, extra_prompt=extra)
+    path = kiro.write_bundle(iroh, "teach", ctx, agents_dir, extra_prompt=extra, name="uncle-iroh")
     done.append(f"wrote {path}")
+    for legacy in ("at-uncle-iroh-teach.json", "at-uncle-iroh-teach.prompt.md"):  # name used before v0.2
+        if (agents_dir / legacy).exists():
+            (agents_dir / legacy).unlink()
+            done.append(f"removed legacy {agents_dir / legacy}")
 
+    # Dashboard registration. `kirocrew agent create` records source "kirocrew" (the label of
+    # KiroCrew's own agent), which hides them among KiroCrew internals. Remove such entries; the
+    # dashboard Agents page re-syncs ~/.kiro/agents/*.json as regular (builtin) agents, with the
+    # description from the JSON.
     if register:
         if shutil.which("kirocrew") is None:
-            done.append("kirocrew not found: skipped dashboard registration")
+            done.append("kirocrew not found: skipped dashboard registration cleanup")
         else:
             listed = subprocess.run(["kirocrew", "agent", "list"], capture_output=True, text=True).stdout
-            for name, kiro_agent in (("agents-team", "agents-team"), ("uncle-iroh", kiro.agent_name(iroh, "teach"))):
-                if any(line.split()[:1] == [name] for line in listed.splitlines()):
-                    done.append(f"kirocrew agent {name} already registered")
-                    continue
-                proc = subprocess.run(["kirocrew", "agent", "create", "--name", name, "--kiro-agent", kiro_agent],
-                                      capture_output=True, text=True)
-                done.append(f"kirocrew agent {name}: " + ("registered" if proc.returncode == 0 else proc.stderr.strip()))
+            for line in listed.splitlines():
+                cols = line.split()
+                if len(cols) >= 5 and cols[0] in {"agents-team", "uncle-iroh"} and cols[-1] == "kirocrew":
+                    proc = subprocess.run(["kirocrew", "agent", "delete", cols[0]], capture_output=True, text=True)
+                    done.append(f"kirocrew agent {cols[0]}: " +
+                                ("removed source=kirocrew entry" if proc.returncode == 0 else proc.stderr.strip()))
+            done.append("open the dashboard Agents page to sync agents-team and uncle-iroh")
     return done
 
 

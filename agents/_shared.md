@@ -109,4 +109,10 @@ Declare Jira changes you believe are needed; the orchestrator batches them and a
 ]
 ```
 
+A `comment` is a **note for the human**, never published as a Jira comment unless the human says so.
+The human folds the useful ones into the card's Resolution Description. So: declare a comment only
+for something the human or the card author must know or decide (an assumption, an open question,
+a check left for them), at most one per run, and never repeat one already declared in an earlier
+phase or iteration. A status update ("tests pass", "review done") is not a jira action.
+
 Markdown-only agents put the same list in a fenced `json` block under a `## Jira actions` heading.

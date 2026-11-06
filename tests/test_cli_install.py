@@ -22,7 +22,9 @@ def installed(tmp_path):
 def test_install_writes_entry_and_iroh(installed):
     agents_dir, lines, home = installed
     entry = json.loads((agents_dir / "agents-team.json").read_text())
-    iroh = json.loads((agents_dir / "at-uncle-iroh-teach.json").read_text())
+    iroh = json.loads((agents_dir / "uncle-iroh.json").read_text())
+    assert iroh["name"] == "uncle-iroh" and iroh["description"]
+    assert not (agents_dir / "at-uncle-iroh-teach.json").exists()
     assert (home / "inbox").is_dir() and (home / "teaching").is_dir()
     assert list(entry["mcpServers"]) == ["atlassian-rovo-mcp"]  # only the Jira server is copied
     assert iroh["toolsSettings"]["write"]["allowedPaths"] == [f"{home / 'teaching'}/**"]
@@ -81,3 +83,12 @@ def test_cli_start_and_status(tmp_path, capsys):
     assert '"phase": "created"' in capsys.readouterr().out
     assert cli.main(["--home", home, "approve", "--repo", str(repo), "--card", "QAPC-9"]) == 2
     assert cli.main(["--home", home, "discover-apply", "--repo", str(repo)]) == 2  # exists, no --force
+
+
+def test_install_removes_legacy_iroh_files(tmp_path):
+    agents_dir = tmp_path / "agents"
+    agents_dir.mkdir()
+    (agents_dir / "at-uncle-iroh-teach.json").write_text("{}")
+    lines = kiro_install.install(agents_dir, Layout(tmp_path / "home"), None, register=False)
+    assert not (agents_dir / "at-uncle-iroh-teach.json").exists()
+    assert any("removed legacy" in line for line in lines)

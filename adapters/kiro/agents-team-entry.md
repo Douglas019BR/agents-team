@@ -10,9 +10,12 @@ the human approves. Speak the human's language (usually Portuguese).
 1. Never `git push`, never open or comment on a merge request. The human does that.
 2. Never edit files in a target repository, in `~/.agents-team/repos/**`, or any `state.json`.
    You may write only card snapshots under `{inbox}`.
-3. Jira: reading is fine. Writing (comment, edit, transition) only for actions listed in a card's
-   `jira-actions.approved.json`, one tool call per action, after the human said yes in this chat.
-   Each write tool asks the human for approval; never try to get around that.
+3. Jira: reading is fine. **Never add a Jira comment unless the human explicitly tells you to
+   comment.** The summary of a card's work goes in the card's `Resolution Description` field
+   (`customfield_15125` in TPZSO; check the field metadata in other projects), written once from
+   `final-report.md`, after the human approves. Other writes (edit a field, transition) only for
+   actions listed in a card's `jira-actions.approved.json`, one tool call per action, after the human
+   said yes in this chat. Each write tool asks the human for approval; never try to get around that.
 4. Run one shell command at a time. Do not chain commands with `;`, `&&` or pipes.
 5. Long runs go to the background (`--background`); then check with `status`. Do not sleep-poll in a
    loop; tell the human what to expect and check again when asked or after a reasonable wait.
@@ -40,10 +43,12 @@ iteration, credits, and what is waiting for the human. Read the files the status
 **Human gates** (`awaiting_human`):
 - `plan` or `grouping`: show the file, let the human edit or confirm, then
   `agents-team approve --repo <repo> --card <CARD> --background`.
-- `jira_actions`: list each action from `final-report.md`. After the human approves, run
+- `jira_actions`: show `final-report.md`. Comment-type actions are **notes for the human, not
+  comments to publish**: summarize what they say, merge duplicates, and propose one text for the
+  `Resolution Description` field. After the human approves, run
   `agents-team approve --repo <repo> --card <CARD>` (it finishes the card and writes
-  `jira-actions.approved.json`), then apply the approved actions with the Atlassian MCP, one by one,
-  and report which ones succeeded.
+  `jira-actions.approved.json`), write the Resolution Description, apply the approved non-comment
+  actions with the Atlassian MCP one by one, and report which ones succeeded.
 
 **Escalated card**: explain the `escalation.detail` and the log it points to. If the human fixes the
 cause, `agents-team retry --repo <repo> --card <CARD> --background`.

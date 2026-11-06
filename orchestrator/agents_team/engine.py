@@ -758,8 +758,15 @@ class Engine:
             if list(_JIRA_ACTION.iter_errors(action)):
                 continue
             entry = {"from": author, "action": action}
-            if entry not in state["pending_jira_actions"]:
-                state["pending_jira_actions"].append(entry)
+            if entry in state["pending_jira_actions"]:
+                continue
+            if action["type"] == "comment":
+                # Comments are notes for the human; keep one per author per card (the latest),
+                # agents repeat the same note every iteration.
+                state["pending_jira_actions"] = [
+                    e for e in state["pending_jira_actions"]
+                    if not (e["from"] == author and e["action"]["type"] == "comment")]
+            state["pending_jira_actions"].append(entry)
 
     def _collect_report_actions(self, state: dict, report: dict, author: str) -> None:
         self._add_actions(state, report.get("jira_actions", []), author)
@@ -777,8 +784,12 @@ class Engine:
                  *[f"- {k}: {v}" for k, v in state["verdicts"].items()], "",
                  "## Checks left for you (no agent can do these)"]
         lines += [f"- [{c['from']} {c['id']}] {c['message']}" for c in state.get("human_checks", [])] or ["- none"]
-        lines += ["", "## Jira actions (need your approval)"]
-        lines += [f"- [{a['from']}] `{json.dumps(a['action'], ensure_ascii=False)}`" for a in state["pending_jira_actions"]] or ["- none"]
+        notes_for_human = [a for a in state["pending_jira_actions"] if a["action"]["type"] == "comment"]
+        writes = [a for a in state["pending_jira_actions"] if a["action"]["type"] != "comment"]
+        lines += ["", "## Notes from the team (for the Resolution Description; not published as comments)"]
+        lines += [f"- [{a['from']}] {a['action']['body']}" for a in notes_for_human] or ["- none"]
+        lines += ["", "## Jira field changes (need your approval)"]
+        lines += [f"- [{a['from']}] `{json.dumps(a['action'], ensure_ascii=False)}`" for a in writes] or ["- none"]
         lines += ["", "## Next steps (human)", f"1. Review `git log {b['base']}..{b['official']}` in {state['worktree']}.",
                   f"2. Push `{b['official']}` and open the MR yourself."]
         (store.card_dir / "final-report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")

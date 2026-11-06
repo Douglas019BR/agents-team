@@ -570,3 +570,16 @@ def test_waive_unblocks_an_escalated_card(tmp_path, repo):
     assert state["awaiting"]["what"] == "grouping"
     assert state["human_checks"][0]["id"] == "Q-001"
     assert state["waivers"][0]["reason"] == "pipeline é do humano"
+
+
+def test_comment_actions_keep_only_latest_per_author(tmp_path, repo):
+    def review(req, n):
+        report(req, "request_changes" if n == 1 else "approve", [BLOCKING] if n == 1 else [],
+               jira=[{"type": "comment", "body": f"nota {n}"},
+                     {"type": "update_field", "field": "labels", "add": ["x"]}])
+
+    engine, rid = started(tmp_path, repo, FakeRunner({("sokka", "review"): review}))
+    state = engine.run(rid, CARD)
+    sokka = [a["action"] for a in state["pending_jira_actions"] if a["from"] == "sokka-reviewer"]
+    assert [a for a in sokka if a["type"] == "comment"] == [{"type": "comment", "body": "nota 2"}]
+    assert sokka.count({"type": "update_field", "field": "labels", "add": ["x"]}) == 1
