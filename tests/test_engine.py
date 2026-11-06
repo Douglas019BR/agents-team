@@ -91,7 +91,9 @@ class FakeRunner:
         key = (req.agent.name, req.phase)
         self.calls[key] += 1
         behavior = self.behaviors[key]
-        behavior(req) if behavior.__code__.co_argcount == 1 else behavior(req, self.calls[key])
+        result = behavior(req) if behavior.__code__.co_argcount == 1 else behavior(req, self.calls[key])
+        if isinstance(result, RunResult):  # a behavior may simulate a harness failure
+            return result
         return RunResult(ok=True, output="", usage={"credits": 0.5, "seconds": 1.0})
 
 
@@ -501,3 +503,35 @@ def test_goldfish_gate_runs_isolated_and_can_send_plan_back(tmp_path, repo):
     inputs_section = first["task"].split("## Inputs (read these first)")[1].split("##")[0]
     assert sorted(l.split(":")[0].strip("- ") for l in inputs_section.strip().splitlines()) == ["card.md", "plan.md"]
     assert (card_dir / "plan-goldfish.round1.json").exists()
+
+
+def test_backend_failure_after_valid_output_is_accepted(tmp_path, repo):
+    def done_then_crash(req):
+        report(req)
+        return RunResult(ok=False, exit_code=1, output="Kiro failed to generate a response", usage={"credits": 0.3})
+
+    runner = FakeRunner({("katara", "qa"): done_then_crash})
+    engine, rid = started(tmp_path, repo, runner)
+    state = engine.run(rid, CARD)
+    assert state["awaiting"]["what"] == "grouping"
+    assert runner.calls[("katara", "qa")] == 1
+
+
+def test_backend_failure_without_output_is_retried(tmp_path, repo):
+    def crash_then_work(req, n):
+        if n == 1:
+            return RunResult(ok=False, exit_code=1, output="Kiro failed to generate a response")
+        assert "exited with 1 before finishing" in req.task
+        report(req)
+
+    runner = FakeRunner({("zuko", "sec"): crash_then_work})
+    engine, rid = started(tmp_path, repo, runner)
+    assert engine.run(rid, CARD)["awaiting"]["what"] == "grouping"
+    assert runner.calls[("zuko", "sec")] == 2
+
+
+def test_backend_failure_twice_escalates(tmp_path, repo):
+    runner = FakeRunner({("zuko", "sec"): lambda r: RunResult(ok=False, exit_code=1)})
+    engine, rid = started(tmp_path, repo, runner)
+    state = engine.run(rid, CARD)
+    assert state["phase"] == "escalated" and "exited with 1" in state["escalation"]["detail"]

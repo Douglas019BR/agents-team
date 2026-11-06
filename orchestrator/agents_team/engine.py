@@ -541,11 +541,16 @@ class Engine:
             usage_total["seconds"] += result.usage.get("seconds", 0)
             self._check_integrity(card_dir, before_digest, skip, name)
             self._check_repo(worktree, before_head, untracked_before, agent, phase, cfg, prefix)
-            if not result.ok:
-                raise Escalate("agent_error", f"{name}/{phase} exited with {result.exit_code}; log {log}")
             errors_seen = self._check_outputs(allowed_out, check)
             if not errors_seen:
+                # A harness/backend failure after the work was written (e.g. "Kiro failed to
+                # generate a response" on the closing turn) does not invalidate valid outputs.
+                if not result.ok:
+                    usage_total["note"] = f"exit {result.exit_code} after valid outputs; accepted (log {log.name})"
                 return usage_total
+            if not result.ok:
+                errors_seen = [f"previous run exited with {result.exit_code} before finishing (see {log.name})",
+                               *errors_seen]
         raise Escalate("agent_error", f"{name}/{phase} outputs still invalid after retry: {errors_seen[:5]}")
 
     def _check_integrity(self, card_dir: Path, before: dict[str, str], skip: Callable[[Path], bool], name: str) -> None:
