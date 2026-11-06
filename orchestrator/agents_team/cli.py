@@ -122,16 +122,20 @@ def main(argv: list[str] | None = None) -> int:
     for name, help_text in (("run", "advance until a human gate or the end"),
                             ("approve", "approve the pending human gate"),
                             ("retry", "re-run the phase that escalated, after you fixed the cause"),
+                            ("waive", "mark findings of the current iteration as yours (not the team's) and re-consolidate"),
                             ("status", "show the card state")):
         q = sub.add_parser(name, help=help_text)
         q.add_argument("--repo", type=Path, default=Path("."))
         q.add_argument("--card", required=True)
-        if name in {"run", "approve", "retry"}:
+        if name == "waive":
+            q.add_argument("--finding", action="append", required=True, help="finding id, e.g. R-001 (repeatable)")
+            q.add_argument("--reason", required=True)
+        if name in {"run", "approve", "retry", "waive"}:
             q.add_argument("--background", action="store_true",
                            help="advance in a detached process; follow with `status` (log: <card>/logs/run.log)")
         if name == "status":
             q.add_argument("--json", action="store_true")
-        if name in {"approve", "retry"}:
+        if name in {"approve", "retry", "waive"}:
             q.add_argument("--run", action="store_true", help="continue running afterwards")
 
     args = parser.parse_args(argv)
@@ -154,8 +158,13 @@ def main(argv: list[str] | None = None) -> int:
                 return _background(args, engine, rid)
             if args.cmd == "run":
                 state = engine.run(rid, args.card)
-            elif args.cmd in {"approve", "retry"}:
-                state = engine.approve(rid, args.card) if args.cmd == "approve" else engine.retry(rid, args.card)
+            elif args.cmd in {"approve", "retry", "waive"}:
+                if args.cmd == "approve":
+                    state = engine.approve(rid, args.card)
+                elif args.cmd == "retry":
+                    state = engine.retry(rid, args.card)
+                else:
+                    state = engine.waive(rid, args.card, args.finding, args.reason)
                 if args.background:
                     return _background(args, engine, rid)
                 if args.run:

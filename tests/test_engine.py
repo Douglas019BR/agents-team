@@ -535,3 +535,38 @@ def test_backend_failure_twice_escalates(tmp_path, repo):
     engine, rid = started(tmp_path, repo, runner)
     state = engine.run(rid, CARD)
     assert state["phase"] == "escalated" and "exited with 1" in state["escalation"]["detail"]
+
+
+HUMAN_ONLY = {"id": "Q-001", "severity": "medium", "category": "acceptance-criteria",
+              "message": "pipeline verde em 3 schedules precisa do CI", "blocking": True, "owner": "human"}
+
+
+def test_human_owned_blocking_finding_does_not_loop(tmp_path, repo):
+    runner = FakeRunner({("katara", "qa"): lambda r: report(r, "request_changes", [dict(HUMAN_ONLY, file="src/token.py", line=1)])})
+    engine, rid = started(tmp_path, repo, runner)
+    state = engine.run(rid, CARD)
+    assert state["awaiting"]["what"] == "grouping"
+    assert runner.calls[("aang", "implement")] == 1  # no pointless iteration
+    assert state["human_checks"] == [{"iteration": 1, "from": "katara-qa", "id": "Q-001",
+                                      "message": "pipeline verde em 3 schedules precisa do CI"}]
+    assert not notes.find(Path(state["worktree"]))  # human findings never become AGENT-NOTEs
+    engine.approve(rid, CARD)
+    engine.run(rid, CARD)
+    final = (tmp_path / "home" / "repos" / rid / "cards" / CARD / "final-report.md").read_text()
+    assert "[katara-qa Q-001] pipeline verde em 3 schedules precisa do CI" in final
+
+
+def test_waive_unblocks_an_escalated_card(tmp_path, repo):
+    agent_owned = dict(HUMAN_ONLY, owner="toph-sdet")
+    runner = FakeRunner({("katara", "qa"): lambda r: report(r, "request_changes", [agent_owned])})
+    engine, rid = started(tmp_path, repo, runner)
+    state = engine.run(rid, CARD)
+    assert state["phase"] == "escalated" and state["escalation"]["reason"] == "max_iterations"
+    with pytest.raises(EngineError, match="not in iteration"):
+        engine.waive(rid, CARD, ["Q-999"], "x")
+    state = engine.waive(rid, CARD, ["Q-001"], "pipeline é do humano")
+    assert state["phase"] == "consolidate" and "escalation" not in state
+    state = engine.run(rid, CARD)
+    assert state["awaiting"]["what"] == "grouping"
+    assert state["human_checks"][0]["id"] == "Q-001"
+    assert state["waivers"][0]["reason"] == "pipeline é do humano"

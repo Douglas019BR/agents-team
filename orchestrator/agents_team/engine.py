@@ -379,26 +379,62 @@ class Engine:
         return store.transition(state, "consolidate", usage=usage)
 
     def _phase_consolidate(self, store: CardStore, state: dict) -> dict:
+        """Decide from the findings, not only the verdicts.
+
+        Only blocking findings the TEAM can fix send the card back. Findings owned by ``human``
+        (CI runs, production checks, product decisions) and findings the human waived become
+        ``human_checks`` in the final report: looping on them only burns iterations, since no
+        agent can resolve them.
+        """
         card_dir, n = store.card_dir, state["iteration"]
         it = iteration_dir(card_dir, n)
         verdicts = state["verdicts"].get(f"{n:02d}", {})
-        if all(verdicts.get(k) == "approve" for k in ("reviewer", "qa", "sec")):
-            return store.transition(state, "grouping_plan", note="all approved")
-        if n >= state["max_iterations"]:
-            raise Escalate("max_iterations", f"iteration {n} still has {verdicts}; see {it}")
-        open_findings = []
+        waived = {(w["iteration"], w["finding"]) for w in state.get("waivers", [])}
+        open_findings, human_checks = [], []
         for name, author in REPORT_AUTHORS.items():
             for finding in load(it / name)["findings"]:
-                if finding.get("status") not in {"fixed", "wont_fix"}:
-                    open_findings.append((finding, author))
+                if finding.get("status") in {"fixed", "wont_fix"}:
+                    continue
+                if finding["owner"] == "human" or (n, finding["id"]) in waived:
+                    if finding.get("blocking"):
+                        human_checks.append({"iteration": n, "from": author, "id": finding["id"],
+                                             "message": finding["message"]})
+                    continue
+                open_findings.append((finding, author))
+        state["human_checks"] = human_checks
+        team_blocking = [f for f, _ in open_findings if f.get("blocking")]
+        if not team_blocking:
+            note = "all approved" if all(verdicts.get(k) == "approve" for k in ("reviewer", "qa", "sec")) \
+                else f"no blocking finding the team can fix; {len(human_checks)} left for the human"
+            return store.transition(state, "grouping_plan", note=note)
+        if n >= state["max_iterations"]:
+            raise Escalate("max_iterations", f"iteration {n} still has {len(team_blocking)} blocking findings "
+                                             f"for the team ({verdicts}); see {it}")
         worktree = Path(state["worktree"])
-        placements = notes.insert(worktree, open_findings)
+        placements = notes.insert(worktree, open_findings)  # human-owned findings never become notes
         write_json(it / "notes.json", [p.__dict__ for p in placements])
         gitops.commit_files(worktree, sorted({p.file for p in placements if p.placed}),
                             f"orchestrator: add review notes (iteration {n:02d})", as_orchestrator=True)
         state["iteration"] = n + 1
-        toph_owned = any(f.get("blocking") and f["owner"] == "toph-sdet" for f, _ in open_findings)
+        toph_owned = any(f["owner"] == "toph-sdet" for f in team_blocking)
         return store.transition(state, "sdet" if toph_owned else "dev", note=f"verdicts {verdicts}")
+
+    def waive(self, repo_id: str, card: str, findings: list[str], reason: str) -> dict[str, Any]:
+        """Human decision: these findings of the current iteration are the human's to handle
+        (or accepted as is). Re-runs the consolidation of that iteration."""
+        store, state = self._open(repo_id, card)
+        if state["phase"] not in {"escalated", "awaiting_human"}:
+            raise EngineError(f"waive applies to escalated or waiting cards; card is in phase {state['phase']}")
+        n = state["iteration"]
+        it = iteration_dir(store.card_dir, n)
+        known = {f["id"] for name in REPORT_AUTHORS if (it / name).exists() for f in load(it / name)["findings"]}
+        unknown = sorted(set(findings) - known)
+        if unknown:
+            raise EngineError(f"findings not in iteration {n:02d}: {unknown}")
+        state.setdefault("waivers", []).extend(
+            {"iteration": n, "finding": f, "reason": reason, "at": now()} for f in findings)
+        state.pop("escalation", None)
+        return store.transition(state, "consolidate", by="human", note=f"waived {findings}: {reason}"[:500])
 
     def _phase_grouping_plan(self, store: CardStore, state: dict) -> dict:
         worktree, branches = Path(state["worktree"]), state["branches"]
@@ -738,7 +774,10 @@ class Engine:
                  f"- Iterations: {state['iteration']}; plan rounds: {state.get('plan_round', 0)}",
                  f"- Credits used: {state.get('usage_total', 0)}", "", "## Gates",
                  *[f"- {'PASS' if g['ok'] else 'FAIL'} {g['gate']}" for g in gates], "", "## Verdicts",
-                 *[f"- {k}: {v}" for k, v in state["verdicts"].items()], "", "## Jira actions (need your approval)"]
+                 *[f"- {k}: {v}" for k, v in state["verdicts"].items()], "",
+                 "## Checks left for you (no agent can do these)"]
+        lines += [f"- [{c['from']} {c['id']}] {c['message']}" for c in state.get("human_checks", [])] or ["- none"]
+        lines += ["", "## Jira actions (need your approval)"]
         lines += [f"- [{a['from']}] `{json.dumps(a['action'], ensure_ascii=False)}`" for a in state["pending_jira_actions"]] or ["- none"]
         lines += ["", "## Next steps (human)", f"1. Review `git log {b['base']}..{b['official']}` in {state['worktree']}.",
                   f"2. Push `{b['official']}` and open the MR yourself."]
