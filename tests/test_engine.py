@@ -453,7 +453,9 @@ def test_branch_name_base_and_commit_format_from_config(tmp_path, repo):
     engine.approve(rid, CARD)
     state = engine.run(rid, CARD)
     wt = Path(state["worktree"])
-    assert sh(wt, "branch", "--show-current") == "QAPC-42"
+    assert sh(wt, "branch", "--show-current") == ""  # detached: the official branch is free
+    assert sh(wt, "rev-parse", "HEAD") == sh(wt, "rev-parse", "QAPC-42")
+    assert "branch refs/heads/QAPC-42" not in sh(repo, "worktree", "list", "--porcelain")  # free to check out
     assert sh(wt, "log", "-1", "--format=%B", "QAPC-42") == "QAPC-42 - Validar token expirado"
     assert sh(wt, "rev-list", "--count", "development..QAPC-42") == "1"
     assert sh(repo, "branch", "--show-current") == "other-work"  # the user's checkout never moved

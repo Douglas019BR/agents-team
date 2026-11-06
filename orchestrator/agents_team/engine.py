@@ -488,6 +488,9 @@ class Engine:
         msg_file.write_text(match.group(1), encoding="utf-8")
         gitops.git(worktree, "commit", "-q", "-F", str(msg_file))
         msg_file.unlink()
+        # Release the official branch: git refuses to check out a branch that another worktree
+        # holds, and the human will want it in their own checkout. Same commit, same files.
+        gitops.git(worktree, "switch", "-q", "--detach")
         return store.transition(state, "final_gates", note=f"official commit {gitops.head(worktree)[:10]}, {removed} notes stripped")
 
     def _phase_final_gates(self, store: CardStore, state: dict) -> dict:
