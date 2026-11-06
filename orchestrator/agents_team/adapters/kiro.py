@@ -185,12 +185,20 @@ def command(agent: AgentDefinition, phase: str, ctx: RunContext, task: str) -> l
     ]
 
 
-USAGE_RE = re.compile(r"Credits:\s*([0-9]+(?:\.[0-9]+)?)\s*\W+\s*Time:\s*([0-9]+(?:\.[0-9]+)?)s")
+USAGE_RE = re.compile(
+    r"Credits:\s*([0-9]+(?:\.[0-9]+)?)\s*\W+\s*Time:\s*((?:[0-9]+h\s*)?(?:[0-9]+m\s*)?[0-9]+(?:\.[0-9]+)?s)")
 ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]")
+_DURATION_PART = re.compile(r"([0-9]+(?:\.[0-9]+)?)([hms])")
+
+
+def parse_duration_seconds(text: str) -> float:
+    """'38s' -> 38, '2m 16s' -> 136, '1h 2m 3s' -> 3723."""
+    scale = {"h": 3600, "m": 60, "s": 1}
+    return sum(float(n) * scale[unit] for n, unit in _DURATION_PART.findall(text))
 
 
 def parse_usage(output: str) -> dict[str, float] | None:
-    """Credits and wall time from kiro-cli's trailing ``Credits: X • Time: Ys`` line.
+    """Credits and wall time from kiro-cli's trailing ``Credits: X • Time: 2m 16s`` line.
 
     kiro-cli exposes credits per run but no token counts. When a run prints several
     summaries, the last one is the run total.
@@ -198,8 +206,8 @@ def parse_usage(output: str) -> dict[str, float] | None:
     matches = USAGE_RE.findall(ANSI_RE.sub("", output))
     if not matches:
         return None
-    credits, seconds = matches[-1]
-    return {"credits": float(credits), "seconds": float(seconds)}
+    credits, duration = matches[-1]
+    return {"credits": float(credits), "seconds": parse_duration_seconds(duration)}
 
 
 def validate_with_kiro(config_path: Path) -> tuple[bool, str]:

@@ -184,3 +184,20 @@ def test_parse_usage_takes_last_summary():
     out = "turn 1\n ▸ Credits: 0.40 • Time: 12s\n\x1b[?25lmore\n ▸ Credits: 1.07 • Time: 38s\n"
     assert kiro.parse_usage(out) == {"credits": 1.07, "seconds": 38.0}
     assert kiro.parse_usage("no summary") is None
+
+
+@pytest.mark.parametrize(
+    ("line", "credits", "seconds"),
+    [
+        ("Credits: 0.02 • Time: 13s", 0.02, 13),
+        ("Credits: 3.44 • Time: 2m 16s", 3.44, 136),
+        ("Credits: 9.10 • Time: 1h 2m 3s", 9.10, 3723),
+        ("Credits: 1.5 • Time: 4m", None, None),  # no seconds part: not a kiro-cli summary we know
+    ],
+)
+def test_parse_usage_durations(line, credits, seconds):
+    usage = kiro.parse_usage(f" ▸ {line}\n")
+    if credits is None:
+        assert usage is None
+    else:
+        assert usage == {"credits": credits, "seconds": seconds}
