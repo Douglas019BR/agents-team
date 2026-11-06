@@ -58,6 +58,9 @@ class RunContext:
     team_models: dict[str, Any] = field(default_factory=dict)
     teaching_dir: Path | None = None
     outputs: tuple[str, ...] = ()
+    # Isolated runs (the goldfish check): extra paths the agent may not read, and no shell at all.
+    deny_read: tuple[str, ...] = ()
+    allow_shell: bool = True
 
 
 def agent_name(agent: AgentDefinition, phase: str) -> str:
@@ -130,10 +133,10 @@ def render(agent: AgentDefinition, phase: str, ctx: RunContext, prompt_path: Pat
         raise AdapterError(f"{agent.name} has no phase {phase!r}")
     perms = agent.meta["permissions"]
     write_allowed = resolve_scopes(perms["write"].get(phase, []), ctx)
-    shell = shell_patterns(agent, ctx)
+    shell = shell_patterns(agent, ctx) if ctx.allow_shell else []
 
     tools = list(READ_TOOLS)
-    settings: dict[str, Any] = {"read": {"deniedPaths": list(SENSITIVE_HOME)}}
+    settings: dict[str, Any] = {"read": {"deniedPaths": [*SENSITIVE_HOME, *ctx.deny_read]}}
     if write_allowed:
         tools.append("write")
         settings["write"] = {

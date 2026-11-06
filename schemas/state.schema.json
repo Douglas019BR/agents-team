@@ -118,6 +118,9 @@
       "properties": {
         "plan": {
           "$ref": "common.schema.json#/$defs/verdict"
+        },
+        "plan_goldfish": {
+          "$ref": "common.schema.json#/$defs/verdict"
         }
       }
     },
@@ -300,6 +303,7 @@
         "fetch_mr",
         "plan",
         "plan_review",
+        "plan_goldfish",
         "sdet",
         "dev",
         "review",

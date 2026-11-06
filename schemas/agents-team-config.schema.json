@@ -236,9 +236,10 @@
       "additionalProperties": false,
       "properties": {
         "plan_approval": {
-          "description": "Who approves plan.md before Toph writes tests.",
+          "description": "Who approves plan.md before Toph writes tests. goldfish: after Sokka, a second Sokka run with a cheap model and no context (only card.md and plan.md) must also approve.",
           "enum": [
             "reviewer",
+            "goldfish",
             "human"
           ],
           "default": "reviewer"

@@ -466,3 +466,38 @@ def test_start_rejects_unknown_base_and_existing_official_branch(tmp_path, repo)
     with pytest.raises(EngineError, match="already exists"):
         make_engine(tmp_path, FakeRunner()).start(repo, CARD, CARD_MD)
     assert not (tmp_path / "home" / "repos" / "grp-target" / "cards" / CARD).exists()  # nothing half-created
+
+
+def test_goldfish_gate_runs_isolated_and_can_send_plan_back(tmp_path, repo):
+    seen = {}
+
+    def goldfish(req, n):
+        from agents_team.adapters import kiro
+        cfg = kiro.render(req.agent, req.phase, req.ctx, req.ctx.worktree / "p.md")  # what KiroRunner would write
+        seen[n] = {"cwd": req.ctx.worktree, "task": req.task, "cfg": cfg, "model": req.agent.model_for(req.phase, req.ctx.team_models)}
+        finding = {k: v for k, v in BLOCKING.items() if k not in {"file", "line"}}
+        report(req, "request_changes" if n == 1 else "approve", [finding] if n == 1 else [], stage="plan")
+
+    _set_cfg(repo, workflow={"plan_approval": "goldfish"})
+    runner = FakeRunner({("sokka", "plan_goldfish"): goldfish})
+    engine, rid = started(tmp_path, repo, runner, models={"sokka": {"plan_review": "gpt-5.6-terra",
+                                                                     "plan_goldfish": "gpt-5.6-luna",
+                                                                     "review": "gpt-5.6-terra"}})
+    state = engine.run(rid, CARD)
+    assert state["awaiting"]["what"] == "grouping"
+    assert runner.calls[("aang", "plan")] == 2  # goldfish rejected round 1
+    assert runner.calls[("sokka", "plan_goldfish")] == 2
+    assert state["verdicts"]["plan_goldfish"] == "approve"
+
+    first = seen[1]
+    card_dir = tmp_path / "home" / "repos" / rid / "cards" / CARD
+    assert first["model"] == "gpt-5.6-luna"
+    assert first["cwd"] != Path(state["worktree"]) and not any(first["cwd"].glob("README*"))  # empty sandbox
+    assert "shell" not in first["cfg"]["tools"]
+    denied = first["cfg"]["toolsSettings"]["read"]["deniedPaths"]
+    assert f"{state['worktree']}/**" in denied
+    assert str((card_dir / "plan-review.json").resolve()) in denied  # cannot anchor on Sokka's verdict
+    assert "Inputs (read these first)" in first["task"] and "worktree" not in first["task"].split("## Inputs")[1]
+    inputs_section = first["task"].split("## Inputs (read these first)")[1].split("##")[0]
+    assert sorted(l.split(":")[0].strip("- ") for l in inputs_section.strip().splitlines()) == ["card.md", "plan.md"]
+    assert (card_dir / "plan-goldfish.round1.json").exists()

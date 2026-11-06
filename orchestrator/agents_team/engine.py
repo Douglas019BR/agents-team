@@ -243,7 +243,8 @@ class Engine:
         plan = card_dir / "plan.md"
         if plan.exists() and state["plan_round"] > 1:
             shutil.copyfile(plan, card_dir / f"plan.round{state['plan_round'] - 1}.md")
-        inputs = self._base_inputs(store, state) | self._existing({"plan-review.json": card_dir / "plan-review.json"})
+        inputs = self._base_inputs(store, state) | self._existing({"plan-review.json": card_dir / "plan-review.json",
+                                                                    "plan-goldfish.json": card_dir / "plan-goldfish.json"})
 
         def check(_: dict) -> list[str]:
             text = plan.read_text(encoding="utf-8")
@@ -271,16 +272,42 @@ class Engine:
         state["verdicts"]["plan"] = report["verdict"]
         cfg = self._repo_config(store)
         if report["verdict"] == "approve":
-            if cfg.get("workflow", {}).get("plan_approval") == "human":
+            approval = cfg.get("workflow", {}).get("plan_approval")
+            if approval == "goldfish":
+                return store.transition(state, "plan_goldfish", by="sokka-reviewer", usage=usage)
+            if approval == "human":
                 state["awaiting"] = {"what": "plan", "next": "sdet", "detail": f"review {card_dir / 'plan.md'}"}
                 return store.transition(state, "awaiting_human", by="sokka-reviewer", usage=usage)
             return store.transition(state, "sdet", by="sokka-reviewer", usage=usage)
+        return self._plan_rejected(store, state, usage, out, "sokka-reviewer")
+
+    def _plan_rejected(self, store: CardStore, state: dict, usage: dict, report: Path, by: str) -> dict:
         if state["plan_round"] < self.team.get("max_plan_rounds", 2):
-            return store.transition(state, "plan", by="sokka-reviewer", usage=usage, note="plan sent back to aang")
+            return store.transition(state, "plan", by=by, usage=usage, note=f"plan sent back to aang by {by}")
         state["awaiting"] = {"what": "plan", "next": "sdet",
                              "detail": f"plan still has blocking findings after {state['plan_round']} rounds; "
-                                       f"approve to continue anyway, see {out}"}
-        return store.transition(state, "awaiting_human", by="sokka-reviewer", usage=usage)
+                                       f"approve to continue anyway, see {report}"}
+        return store.transition(state, "awaiting_human", by=by, usage=usage)
+
+    def _phase_plan_goldfish(self, store: CardStore, state: dict) -> dict:
+        """Sokka again, cheap model, no context: can someone who knows nothing but the card follow the plan?"""
+        card_dir = store.card_dir
+        out = card_dir / "plan-goldfish.json"
+        if out.exists():
+            archived = card_dir / f"plan-goldfish.round{state['plan_round'] - 1}.json"
+            if state["plan_round"] > 1 and not archived.exists():
+                out.rename(archived)
+            else:
+                out.unlink()
+        inputs = {"card.md": card_dir / "card.md", "plan.md": card_dir / "plan.md"}  # nothing else, on purpose
+        usage = self._run(store, state, "sokka", "plan_goldfish", inputs, [out], isolated=True,
+                          check=self._report_check(state, "sokka", "plan", 0, phase="plan_goldfish", path=out))
+        report = load(out)
+        self._collect_report_actions(state, report, "sokka-reviewer")
+        state["verdicts"]["plan_goldfish"] = report["verdict"]
+        if report["verdict"] == "approve":
+            return store.transition(state, "sdet", by="sokka-reviewer", usage=usage, note="goldfish approved the plan")
+        return self._plan_rejected(store, state, usage, out, "sokka-reviewer (goldfish)")
 
     def _phase_sdet(self, store: CardStore, state: dict) -> dict:
         card_dir = store.card_dir
@@ -466,7 +493,7 @@ class Engine:
 
     def _run(self, store: CardStore, state: dict, name: str, phase: str, inputs: dict[str, Path],
              outputs: list[Path], *, check: Callable[[dict], list[str]] | None = None,
-             scratch: list[Path] = (), concurrent_outputs: list[Path] = ()) -> dict[str, Any]:
+             scratch: list[Path] = (), concurrent_outputs: list[Path] = (), isolated: bool = False) -> dict[str, Any]:
         agent = self.agents[name]
         card_dir, worktree = store.card_dir, Path(state["worktree"])
         prefix = f"{agent.name}-{agent.meta['role']}"
@@ -474,16 +501,29 @@ class Engine:
         scratch_dirs = [p.resolve() for p in scratch]
         others = [p.resolve() for p in concurrent_outputs]
         logs = (card_dir / "logs").resolve()
+        # Isolated runs start in an empty directory (so the harness injects no repo README/AGENTS.md)
+        # and may read only their declared inputs.
+        sandbox = (card_dir / ".isolated" / f"{name}-{phase}").resolve() if isolated else None
 
         def skip(path: Path) -> bool:
             p = path.resolve()
             return (p in allowed_out or p in others or logs in p.parents
+                    or (sandbox is not None and (p == sandbox or sandbox in p.parents))
                     or any(d == p or d in p.parents for d in scratch_dirs + others))
 
         cfg = self._repo_config(store)
-        ctx = RunContext(worktree=worktree, card_dir=card_dir, repo_config=cfg,
+        deny_read: tuple[str, ...] = ()
+        if sandbox is not None:
+            shutil.rmtree(sandbox, ignore_errors=True)
+            sandbox.mkdir(parents=True)
+            readable = {p.resolve() for p in inputs.values()}
+            deny_read = (f"{worktree}/**", f"{self.layout.repo_dir(state['repo_id'])}/memory/**",
+                         *[str(p) for p in sorted(card_dir.resolve().rglob("*"))
+                           if p.is_file() and p not in readable and p not in allowed_out and not skip(p)])
+        ctx = RunContext(worktree=sandbox or worktree, card_dir=card_dir, repo_config=cfg,
                          team_models=self.team.get("models", {}),
-                         outputs=tuple([str(p) for p in allowed_out] + [f"{d}/**" for d in scratch_dirs]))
+                         outputs=tuple([str(p) for p in allowed_out] + [f"{d}/**" for d in scratch_dirs]),
+                         deny_read=deny_read, allow_shell=not isolated)
         before_head, before_digest = gitops.head(worktree), _digest(card_dir, skip)
         untracked_before = gitops.status(worktree)[1]
         errors_seen: list[str] = []
@@ -493,7 +533,8 @@ class Engine:
                 p.parent.mkdir(parents=True, exist_ok=True)
             for d in scratch_dirs:
                 d.mkdir(parents=True, exist_ok=True)
-            task = self._task(state, agent, phase, inputs, sorted(allowed_out), scratch_dirs, cfg, errors_seen)
+            task = self._task(state, agent, phase, inputs, sorted(allowed_out), scratch_dirs, cfg, errors_seen,
+                              isolated=isolated)
             log = card_dir / "logs" / f"it{state['iteration']:02d}-{name}-{phase}-{attempt}.log"
             result = self.runner.run(RunRequest(agent, phase, task, ctx, log))
             usage_total["credits"] = round(usage_total["credits"] + result.usage.get("credits", 0), 4)
@@ -546,18 +587,20 @@ class Engine:
             return [f"missing or empty output: {m}" for m in missing]
         return check({}) if check else []
 
-    def _report_check(self, state: dict, name: str, stage: str, iteration: int) -> Callable[[dict], list[str]]:
+    def _report_check(self, state: dict, name: str, stage: str, iteration: int, *, phase: str | None = None,
+                      path: Path | None = None) -> Callable[[dict], list[str]]:
         agent = self.agents[name]
         role = agent.meta["role"]
         out_name = {"plan": "plan-review.json"}.get(stage) or {"reviewer": "review.json", "qa": "qa.json", "sec": "sec.json"}[role]
+        run_phase = phase or self._phase_for(name, stage)
 
         def check(_: dict) -> list[str]:
             card_dir = self.layout.card_dir(state["repo_id"], state["card"])
-            path = card_dir / out_name if stage == "plan" else iteration_dir(card_dir, iteration) / out_name
+            report_path = path or (card_dir / out_name if stage == "plan" else iteration_dir(card_dir, iteration) / out_name)
             try:
-                report = load(path)
+                report = load(report_path)
             except (json.JSONDecodeError, OSError) as exc:
-                return [f"{path.name} is not valid JSON: {exc}"]
+                return [f"{report_path.name} is not valid JSON: {exc}"]
             problems = errors("finding-report", report) if isinstance(report, dict) else ["report must be a JSON object"]
             if problems:  # schema errors first; the extra checks assume a well-formed report
                 return problems
@@ -567,8 +610,8 @@ class Engine:
             if who["name"] != agent.name or who["role"] != role:
                 problems.append(f"agent must be name={agent.name!r} role={role!r}")
             if not problems:  # record the model that actually ran, not the one the agent claims
-                report["agent"]["model"] = agent.model_for(self._phase_for(name, stage), self.team.get("models", {}))
-                write_json(path, report)
+                report["agent"]["model"] = agent.model_for(run_phase, self.team.get("models", {}))
+                write_json(report_path, report)
             return problems
         return check
 
@@ -577,7 +620,7 @@ class Engine:
         return {"sokka": "plan_review" if stage == "plan" else "review", "katara": "qa", "zuko": "sec"}[name]
 
     def _task(self, state: dict, agent: AgentDefinition, phase: str, inputs: dict[str, Path], outputs: list[Path],
-              scratch: list[Path], cfg: dict, previous_errors: list[str]) -> str:
+              scratch: list[Path], cfg: dict, previous_errors: list[str], isolated: bool = False) -> str:
         perms = agent.meta["permissions"]
         paths = cfg.get("paths", {})
         write = [g for s in perms["write"].get(phase, []) if s.startswith("paths.") for g in paths.get(s[6:], [])]
@@ -590,24 +633,34 @@ class Engine:
             elif item.startswith("git:"):
                 commands.append(f"git {item[4:]}")
         worktree = Path(state["worktree"])
-        lines = [
+        head = [
             "# agents-team task", "",
             f"- card: {state['card']}", f"- flow: {state['flow']}", f"- phase: {phase}",
             f"- iteration: {state['iteration']}",
-            f"- worktree (your working directory): {worktree}",
-            f"- base branch: {state['branches']['base']}; work branch: {state['branches']['work']}",
-            f"- current commit: {gitops.head(worktree)}", "",
+        ]
+        if isolated:
+            head += ["- isolated run: you have NO repository, NO shell and NO other artifacts. "
+                     "Read only the inputs below; every other read is denied.", ""]
+        else:
+            head += [f"- worktree (your working directory): {worktree}",
+                     f"- base branch: {state['branches']['base']}; work branch: {state['branches']['work']}",
+                     f"- current commit: {gitops.head(worktree)}", ""]
+        lines = [
+            *head,
             "## Inputs (read these first)", *[f"- {k}: {v}" for k, v in inputs.items()], "",
             "## Outputs (write exactly these files; you may not write any other artifact)",
-            *[f"- {p}" for p in outputs], *[f"- scratch directory for raw tool output: {d}" for d in scratch], "",
-            "## Repository write scope", *([f"- {g}" for g in write] or ["- none: do not change repository files"]), "",
-            "## Allowed shell commands (one per call, extra safe arguments allowed)", *[f"- `{c}`" for c in commands],
+            *[f"- {p}" for p in outputs], *[f"- scratch directory for raw tool output: {d}" for d in scratch],
         ]
+        if not isolated:
+            lines += ["", "## Repository write scope",
+                      *([f"- {g}" for g in write] or ["- none: do not change repository files"]), "",
+                      "## Allowed shell commands (one per call, extra safe arguments allowed)",
+                      *[f"- `{c}`" for c in commands]]
         if agent.name == "zuko":
             lines += ["", f"## Security threshold\n- block_severity: {cfg.get('security', {}).get('block_severity', 'high')}"]
         json_outputs = [p for p in outputs if p.suffix == ".json"]
         if json_outputs:
-            stage = "plan" if phase == "plan_review" else "code"
+            stage = "plan" if phase in {"plan_review", "plan_goldfish"} else "code"
             header = {"schema": "agents-team/finding-report@1", "card": state["card"], "flow": state["flow"],
                       "stage": stage, "iteration": 0 if stage == "plan" else state["iteration"],
                       "agent": {"name": agent.name, "role": agent.meta["role"],
