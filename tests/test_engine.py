@@ -585,3 +585,41 @@ def test_comment_actions_keep_only_latest_per_author(tmp_path, repo):
     sokka = [a["action"] for a in state["pending_jira_actions"] if a["from"] == "sokka-reviewer"]
     assert [a for a in sokka if a["type"] == "comment"] == [{"type": "comment", "body": "nota 2"}]
     assert sokka.count({"type": "update_field", "field": "labels", "add": ["x"]}) == 1
+
+
+def test_review_fix_mode_skips_sdet_and_gates_only_changed_files(tmp_path, repo):
+    """Addressing review comments: no Toph phase, commits 'CARD: title', gates on changed files only."""
+    (repo / "src" / "legacy_bad.py").write_text("def (:\n")  # pre-existing breakage outside the change
+    commit(repo, "chore", "legacy file that the gate must not see")
+    _set_cfg(repo, workflow={"sdet": "skip"}, commits={"convention": "ticket-colon", "trailers": False},
+             commands={"test": "python3 -m py_compile {target}"},
+             gates={"diff_base": "main", "files": ["**/*.py"]})
+    runner = FakeRunner()
+    engine, rid = started(tmp_path, repo, runner)
+    state = engine.run(rid, CARD)
+    assert state["awaiting"]["what"] == "grouping"
+    assert runner.calls[("toph", "write_tests")] == 0
+    assert state["iteration"] == 1
+    plan = (tmp_path / "home" / "repos" / rid / "cards" / CARD / "grouping-plan.md").read_text()
+    assert "```text\nQAPC-42: Validar token expirado\n```" in plan
+    engine.approve(rid, CARD)
+    state = engine.run(rid, CARD)
+    assert state["phase"] == "done"  # legacy_bad.py is not in the change, so it is not compiled
+    gates = json.loads((tmp_path / "home" / "repos" / rid / "cards" / CARD / "final-gates.json").read_text())
+    test_gate = next(g for g in gates if g["gate"] == "commands.test")
+    assert test_gate["ok"]  # compiling legacy_bad.py would have failed: only changed files were checked
+
+
+def test_gate_with_target_fails_on_broken_changed_file(tmp_path, repo):
+    def broken(req):
+        implement(req)
+        (req.ctx.worktree / "src" / "token.py").write_text("def (:\n")
+        commit(req.ctx.worktree, "aang-dev", "broken")
+
+    _set_cfg(repo, workflow={"sdet": "skip"}, commands={"test": "python3 -m py_compile {target}"},
+             gates={"files": ["**/*.py"]})
+    engine, rid = started(tmp_path, repo, FakeRunner({("aang", "implement"): broken}))
+    engine.run(rid, CARD)
+    engine.approve(rid, CARD)
+    state = engine.run(rid, CARD)
+    assert state["phase"] == "escalated" and state["escalation"]["reason"] == "gate_failed"

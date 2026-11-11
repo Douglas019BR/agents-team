@@ -168,10 +168,11 @@
       "additionalProperties": false,
       "properties": {
         "convention": {
-          "description": "conventional: 'feat: title'. ticket-dash: '<CARD> - title'. free: title only.",
+          "description": "conventional: 'feat: title'. ticket-dash: '<CARD> - title'. ticket-colon: '<CARD>: title'. free: title only.",
           "enum": [
             "conventional",
             "ticket-dash",
+            "ticket-colon",
             "free"
           ],
           "default": "conventional"
@@ -243,6 +244,29 @@
             "human"
           ],
           "default": "reviewer"
+        },
+        "sdet": {
+          "description": "run: Toph writes tests after the plan (default). skip: no test phase, Aang goes straight from the approved plan to implementation (e.g. addressing review comments on code whose tests already exist).",
+          "enum": ["run", "skip"],
+          "default": "run"
+        }
+      }
+    },
+    "gates": {
+      "description": "Final gates. A command containing {target} runs on the files changed against diff_base, like CI jobs that only check what an MR touches.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "diff_base": {
+          "description": "Ref to diff against for {target} (e.g. origin/develop). Default: the card's base branch.",
+          "type": "string",
+          "minLength": 1
+        },
+        "files": {
+          "description": "Globs the changed files must match to be passed as {target}.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
         }
       }
     }

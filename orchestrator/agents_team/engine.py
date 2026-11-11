@@ -271,20 +271,27 @@ class Engine:
         self._collect_report_actions(state, report, "sokka-reviewer")
         state["verdicts"]["plan"] = report["verdict"]
         cfg = self._repo_config(store)
+        after = self._after_plan(cfg)
         if report["verdict"] == "approve":
             approval = cfg.get("workflow", {}).get("plan_approval")
             if approval == "goldfish":
                 return store.transition(state, "plan_goldfish", by="sokka-reviewer", usage=usage)
             if approval == "human":
-                state["awaiting"] = {"what": "plan", "next": "sdet", "detail": f"review {card_dir / 'plan.md'}"}
+                state["awaiting"] = {"what": "plan", "next": after, "detail": f"review {card_dir / 'plan.md'}"}
                 return store.transition(state, "awaiting_human", by="sokka-reviewer", usage=usage)
-            return store.transition(state, "sdet", by="sokka-reviewer", usage=usage)
+            return store.transition(state, after, by="sokka-reviewer", usage=usage)
         return self._plan_rejected(store, state, usage, out, "sokka-reviewer")
+
+    @staticmethod
+    def _after_plan(cfg: dict) -> str:
+        """Phase after an approved plan: Toph's tests, or straight to Aang when the card has no
+        test phase (e.g. addressing review comments on code whose tests already exist)."""
+        return "dev" if cfg.get("workflow", {}).get("sdet") == "skip" else "sdet"
 
     def _plan_rejected(self, store: CardStore, state: dict, usage: dict, report: Path, by: str) -> dict:
         if state["plan_round"] < self.team.get("max_plan_rounds", 2):
             return store.transition(state, "plan", by=by, usage=usage, note=f"plan sent back to aang by {by}")
-        state["awaiting"] = {"what": "plan", "next": "sdet",
+        state["awaiting"] = {"what": "plan", "next": self._after_plan(self._repo_config(store)),
                              "detail": f"plan still has blocking findings after {state['plan_round']} rounds; "
                                        f"approve to continue anyway, see {report}"}
         return store.transition(state, "awaiting_human", by=by, usage=usage)
@@ -306,7 +313,8 @@ class Engine:
         self._collect_report_actions(state, report, "sokka-reviewer")
         state["verdicts"]["plan_goldfish"] = report["verdict"]
         if report["verdict"] == "approve":
-            return store.transition(state, "sdet", by="sokka-reviewer", usage=usage, note="goldfish approved the plan")
+            return store.transition(state, self._after_plan(self._repo_config(store)), by="sokka-reviewer",
+                                    usage=usage, note="goldfish approved the plan")
         return self._plan_rejected(store, state, usage, out, "sokka-reviewer (goldfish)")
 
     def _phase_sdet(self, store: CardStore, state: dict) -> dict:
@@ -325,14 +333,16 @@ class Engine:
         return store.transition(state, "dev", by="toph-sdet", usage=usage, note=phase)
 
     def _phase_dev(self, store: CardStore, state: dict) -> dict:
+        state["iteration"] = max(state["iteration"], 1)  # sdet sets it, unless the card skips sdet
         card_dir, n = store.card_dir, state["iteration"]
         summary = iteration_dir(card_dir, n) / "change-summary.md"
-        inputs = self._base_inputs(store, state) | {"plan.md": card_dir / "plan.md", "test-plan.md": card_dir / "test-plan.md"}
+        inputs = self._base_inputs(store, state) | {"plan.md": card_dir / "plan.md"}
+        inputs |= self._existing({"test-plan.md": card_dir / "test-plan.md"})
         inputs |= self._previous_reports(card_dir, n)
         usage = self._run(store, state, "aang", "implement", inputs, [summary])
         self._collect_markdown_actions(state, summary, "aang-dev")
         disputed = has_content(section(summary.read_text(encoding="utf-8"), "Disputed tests"))
-        if disputed and n not in state["dispute_iterations"]:
+        if disputed and n not in state["dispute_iterations"] and self._after_plan(self._repo_config(store)) == "sdet":
             state["dispute_iterations"].append(n)
             return store.transition(state, "sdet", by="aang-dev", usage=usage, note="aang disputed tests")
         return store.transition(state, "review", by="aang-dev", usage=usage)
@@ -341,10 +351,10 @@ class Engine:
         card_dir, n = store.card_dir, state["iteration"]
         it = iteration_dir(card_dir, n)
         out = it / "review.json"
-        inputs = self._base_inputs(store, state) | {
-            "plan.md": card_dir / "plan.md", "test-plan.md": card_dir / "test-plan.md",
-            "change-summary.md": it / "change-summary.md"}
-        inputs |= self._existing({"previous review.json": iteration_dir(card_dir, n - 1) / "review.json"})
+        inputs = self._base_inputs(store, state) | {"plan.md": card_dir / "plan.md",
+                                                    "change-summary.md": it / "change-summary.md"}
+        inputs |= self._existing({"test-plan.md": card_dir / "test-plan.md",
+                                  "previous review.json": iteration_dir(card_dir, n - 1) / "review.json"})
         usage = self._run(store, state, "sokka", "review", inputs, [out], check=self._report_check(state, "sokka", "code", n))
         report = load(out)
         self._collect_report_actions(state, report, "sokka-reviewer")
@@ -354,8 +364,8 @@ class Engine:
     def _phase_qa_sec(self, store: CardStore, state: dict) -> dict:
         card_dir, n = store.card_dir, state["iteration"]
         it, prev = iteration_dir(card_dir, n), iteration_dir(card_dir, n - 1)
-        base = self._base_inputs(store, state) | {"test-plan.md": card_dir / "test-plan.md",
-                                                  "change-summary.md": it / "change-summary.md"}
+        base = self._base_inputs(store, state) | {"change-summary.md": it / "change-summary.md"}
+        base |= self._existing({"test-plan.md": card_dir / "test-plan.md"})
         jobs = {
             "katara": ("qa", base | self._existing({"previous qa.json": prev / "qa.json"}), it / "qa.json"),
             "zuko": ("sec", base | {"plan.md": card_dir / "plan.md"} | self._existing({"previous sec.json": prev / "sec.json"}),
@@ -417,7 +427,8 @@ class Engine:
                             f"orchestrator: add review notes (iteration {n:02d})", as_orchestrator=True)
         state["iteration"] = n + 1
         toph_owned = any(f["owner"] == "toph-sdet" for f in team_blocking)
-        return store.transition(state, "sdet" if toph_owned else "dev", note=f"verdicts {verdicts}")
+        to_sdet = toph_owned and self._after_plan(self._repo_config(store)) == "sdet"
+        return store.transition(state, "sdet" if to_sdet else "dev", note=f"verdicts {verdicts}")
 
     def waive(self, repo_id: str, card: str, findings: list[str], reason: str) -> dict[str, Any]:
         """Human decision: these findings of the current iteration are the human's to handle
@@ -443,11 +454,12 @@ class Engine:
         title = card_title(card_md, state["card"])
         commits_cfg = cfg.get("commits", {})
         convention = commits_cfg.get("convention", "conventional")
-        subject = {"conventional": f"feat: {title}", "ticket-dash": f"{state['card']} - {title}"}.get(convention, title)
+        subject = {"conventional": f"feat: {title}", "ticket-dash": f"{state['card']} - {title}",
+                   "ticket-colon": f"{state['card']}: {title}"}.get(convention, title)
         authors = sorted({s.split(":", 1)[0] for _, s in gitops.commits(worktree, branches["base"], branches["work"])
                           if s.split(":", 1)[0] in {"aang-dev", "toph-sdet"}})
         message = f"{subject}\n"
-        if convention != "ticket-dash":
+        if convention not in {"ticket-dash", "ticket-colon"}:
             message += f"\nRefs: {state['card']}\n"
         if commits_cfg.get("trailers", True):
             message += (f"\nAgent-Authors: {', '.join(authors) or 'none'}\n"
@@ -500,12 +512,26 @@ class Engine:
         files = gitops.changed_files(worktree, branches["base"], branches["official"])
         leftover = notes.find(worktree, files)
         results.append({"gate": "agent-notes", "ok": not leftover, "detail": leftover[:20]})
-        for key in ("test", "bdd", "lint"):
+        for key in ("test", "bdd", "lint", "typecheck"):
             cmd = cfg["commands"].get(key)
             if not cmd:
                 continue
+            argv = shlex.split(cmd)
+            if "{target}" in cmd:
+                # Like CI quality jobs that only check the files a change touches: {target} expands to
+                # the files changed against gates.diff_base (default: the card's base branch).
+                gates = cfg.get("gates", {})
+                diff_base = gates.get("diff_base", branches["base"])
+                targets = [f for f in gitops.changed_files(worktree, diff_base, branches["official"])
+                           if globs.match_any(f, gates.get("files", ["**"])) and (worktree / f).exists()]
+                if not targets:
+                    results.append({"gate": f"commands.{key}", "command": cmd, "ok": True,
+                                    "output_tail": f"no changed files vs {diff_base}; skipped"})
+                    continue
+                i = argv.index("{target}")
+                argv = argv[:i] + targets + argv[i + 1:]
             try:
-                proc = subprocess.run(shlex.split(cmd), cwd=worktree, capture_output=True, text=True,
+                proc = subprocess.run(argv, cwd=worktree, capture_output=True, text=True,
                                       timeout=self.gate_timeout_secs, stdin=subprocess.DEVNULL)
                 ok, tail = proc.returncode == 0, (proc.stdout + proc.stderr)[-4000:]
             except (OSError, subprocess.TimeoutExpired) as exc:
