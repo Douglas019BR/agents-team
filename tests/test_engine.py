@@ -623,3 +623,18 @@ def test_gate_with_target_fails_on_broken_changed_file(tmp_path, repo):
     engine.approve(rid, CARD)
     state = engine.run(rid, CARD)
     assert state["phase"] == "escalated" and state["escalation"]["reason"] == "gate_failed"
+
+
+def test_gate_targets_use_merge_base_not_newer_base_commits(tmp_path, repo):
+    """A file broken on the base branch AFTER the card branched is not part of the change."""
+    sh(repo, "branch", "develop")
+    _set_cfg(repo, workflow={"sdet": "skip"}, commands={"test": "python3 -m py_compile {target}"},
+             gates={"diff_base": "develop", "files": ["**/*.py"]})
+    engine, rid = started(tmp_path, repo, FakeRunner())
+    sh(repo, "switch", "-q", "develop")
+    (repo / "src" / "newer_on_develop.py").write_text("def (:\n")
+    commit(repo, "chore", "broken file added to develop later")
+    sh(repo, "switch", "-q", "main")
+    engine.run(rid, CARD)
+    engine.approve(rid, CARD)
+    assert engine.run(rid, CARD)["phase"] == "done"

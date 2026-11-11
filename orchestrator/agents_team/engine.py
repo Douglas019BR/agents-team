@@ -522,7 +522,10 @@ class Engine:
                 # the files changed against gates.diff_base (default: the card's base branch).
                 gates = cfg.get("gates", {})
                 diff_base = gates.get("diff_base", branches["base"])
-                targets = [f for f in gitops.changed_files(worktree, diff_base, branches["official"])
+                # Three-dot, like an MR diff: changes since the merge base only, never the base
+                # branch's own newer commits.
+                merge_diff = gitops.git(worktree, "diff", "--name-only", f"{diff_base}...{branches['official']}")
+                targets = [f for f in merge_diff.splitlines()
                            if globs.match_any(f, gates.get("files", ["**"])) and (worktree / f).exists()]
                 if not targets:
                     results.append({"gate": f"commands.{key}", "command": cmd, "ok": True,
