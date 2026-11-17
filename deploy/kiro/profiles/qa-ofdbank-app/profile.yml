@@ -1,0 +1,3 @@
+repo_id: qa-ofdbank-app
+remote: git@gitlab.gastecnologia.com.br:QA/ofdbank-app.git
+clone: git clone git@gitlab.gastecnologia.com.br:QA/ofdbank-app.git

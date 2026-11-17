@@ -1,0 +1,3 @@
+repo_id: gasbiz-integration-tests
+remote: git@gitlab.gastecnologia.com.br:Gasbiz/integration-tests.git
+clone: git clone git@gitlab.gastecnologia.com.br:Gasbiz/integration-tests.git

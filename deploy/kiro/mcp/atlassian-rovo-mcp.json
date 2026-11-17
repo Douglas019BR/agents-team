@@ -1,0 +1,7 @@
+{
+  "command": "/bin/bash",
+  "args": [
+    "-c",
+    "{node_setup}exec npx -y mcp-remote@latest https://mcp.atlassian.com/v1/mcp"
+  ]
+}

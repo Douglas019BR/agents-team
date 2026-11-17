@@ -100,6 +100,30 @@ def _discover(args: argparse.Namespace, engine: Engine) -> int:
     return 0
 
 
+def _deploy_cmd(args: argparse.Namespace) -> int:
+    """install / doctor / export-profile: no card engine, no team config required."""
+    from . import deploy
+
+    layout = Layout.default(args.home)
+    paths = deploy.Paths(layout=layout)
+    if args.cmd == "export-profile":
+        try:
+            dest = deploy.export_profile(args.repo, layout, paths.deploy_dir / "profiles", args.clone)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        print(f"exported to {dest}; review it for card-specific settings before committing")
+        return 0
+    if args.cmd == "install":
+        report = deploy.install(paths, force=args.force, force_mcp=args.force_mcp,
+                                register=not args.no_register, network=not args.offline)
+    else:
+        report = deploy.doctor(paths, network=not args.offline)
+    for line in report.lines():
+        print(line)
+    return 1 if report.fail else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="agents-team", description=__doc__)
     parser.add_argument("--home", help="state root (default: $AGENTS_TEAM_HOME or ~/.agents-team)")
@@ -112,6 +136,18 @@ def main(argv: list[str] | None = None) -> int:
     da = sub.add_parser("discover-apply", help="copy the approved proposal into the repository (git-excluded)")
     da.add_argument("--repo", type=Path, default=Path("."))
     da.add_argument("--force", action="store_true", help="replace an existing .agents-team.yml")
+
+    ins = sub.add_parser("install", help="set up this machine/account from deploy/kiro (idempotent)")
+    ins.add_argument("--target", choices=["kirocrew"], default="kirocrew")
+    ins.add_argument("--force", action="store_true", help="overwrite config.yml and staged profiles")
+    ins.add_argument("--force-mcp", action="store_true", help="replace existing MCP server entries")
+    ins.add_argument("--no-register", action="store_true", help="skip dashboard registration cleanup")
+    ins.add_argument("--offline", action="store_true", help="skip the GitLab reachability check")
+    doc = sub.add_parser("doctor", help="check that this machine/account is ready to run cards")
+    doc.add_argument("--offline", action="store_true")
+    ex = sub.add_parser("export-profile", help="copy a repo's .agents-team.yml + conventions to deploy/kiro/profiles")
+    ex.add_argument("--repo", type=Path, default=Path("."))
+    ex.add_argument("--clone", default="", help="hint stored in profile.yml, e.g. ~/repos/<name>")
 
     p = sub.add_parser("start", help="create the card worktree and state")
     p.add_argument("--repo", type=Path, default=Path("."))
@@ -139,6 +175,8 @@ def main(argv: list[str] | None = None) -> int:
             q.add_argument("--run", action="store_true", help="continue running afterwards")
 
     args = parser.parse_args(argv)
+    if args.cmd in {"install", "doctor", "export-profile"}:
+        return _deploy_cmd(args)
     try:
         engine = _engine(args)
         if args.cmd == "discover":

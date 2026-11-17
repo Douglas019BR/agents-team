@@ -1,0 +1,84 @@
+# Profile for Gasbiz/integration-tests (Analytics Dashboard behave harness, analyticsbdd/).
+# behave is deliberately absent from commands: it needs a browser and a live
+# test environment. The CI gate is ruff + mypy on the files an MR touches.
+
+version: 1
+
+stack:
+  language: python
+  language_version: "3.11"
+  package_manager: pip
+  bdd: behave
+  frameworks: [behave, selenium]
+
+commands:
+  test: "uvx ruff@0.11.12 check --config ruff.toml {target}"
+  test_single: "uvx ruff@0.11.12 check --config ruff.toml {target}"
+  lint: "uvx ruff@0.11.12 format --check --config ruff.toml {target}"
+  format: "uvx ruff@0.11.12 format --config ruff.toml {target}"
+  typecheck: "uvx --with types-pytz --with types-python-dateutil --with types-requests mypy@1.15.0 --config-file mypy.ini {target}"
+
+paths:
+  source:
+    - "analyticsbdd/features/steps/**"
+    - "analyticsbdd/pages/**"
+  tests:
+    - "analyticsbdd/features/**/*.feature"
+  features:
+    - "analyticsbdd/features/**/*.feature"
+  steps:
+    - "analyticsbdd/features/steps/**"
+  protected:
+    - ".gitlab-ci.yml"
+    - "behave.ini"
+    - "ruff.toml"
+    - "mypy.ini"
+    - "requirements.txt"
+    - "requirements-dev.txt"
+    - ".gitmodules"
+    - "sonar-project.properties"
+    - "analyticsbdd/features/environment.py"
+    - "analyticsbdd/webdrivers/**"
+    - "analyticsbdd/modules/webdrivers.py"
+    - "sauron/**"
+    - "scenarios_files/**"
+
+security:
+  tools: []
+  block_severity: high
+
+commits:
+  convention: ticket-colon   # history uses "AD-NNNN: message"
+  trailers: false
+
+branches:
+  base: develop
+  official: "{card}"         # branch named exactly like the card
+  # Review-fix cards (addressing MR comments) override per card:
+  #   base: <MR source branch>, official: "{card}-review", workflow.sdet: skip
+
+workflow:
+  plan_approval: reviewer
+
+gates:
+  diff_base: origin/develop  # CI lints only the files the MR touches vs develop
+  files: ["**/*.py"]
+
+jira:
+  project_keys: [AD]
+
+generated:
+  by: agents-team-discovery
+  at: "2026-11-11T12:20:31Z"
+  commit: 643022f31b0c63514eb591b3c10bae0b063229d1
+  confidence:
+    - commands.test
+    - commands.test_single
+    - commands.lint
+    - commands.typecheck
+    - paths.tests
+    - paths.features
+    - paths.steps
+    - paths.protected
+    - security.tools
+    - commits.convention

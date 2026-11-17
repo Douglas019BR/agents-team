@@ -1,0 +1,62 @@
+version: 1
+
+generated:
+  by: agents-team-discovery
+  at: "2026-11-06T07:20:00-03:00"
+  commit: 569c2d0c4e285ecb485f91b3ec5e4d30ea38459a
+  confidence:
+    - commands.test            # unittest chosen by the team; the repo has no test runner for the Python harness
+    - commands.test_single     # relies on integrationtests/tests/__init__.py adding integrationtests/ to sys.path
+    - paths.source             # harness code only; widen per card if needed
+    - stack.package_manager    # inferred from integrationtests/requirements.txt (pip)
+    - jira.project_keys        # inferred from commit subjects
+
+# Scope: only the Python/behave harness under integrationtests/.
+# The Flutter/Dart app is deliberately left out (flutter/dart are not on the agent machine).
+stack:
+  language: python
+  package_manager: pip
+  test_runner: unittest
+
+commands:
+  test: python3 -m unittest discover -s integrationtests/tests -t integrationtests
+  test_single: python3 -m unittest {target}
+
+paths:
+  source:
+    - integrationtests/features/environment.py
+    - integrationtests/features/steps/**
+    - integrationtests/helpers/**
+    - integrationtests/modules/**
+    - integrationtests/parallel.py
+    - integrationtests/data/logging.json
+  tests:
+    - integrationtests/tests/**
+  protected:
+    - .gitlab-ci.yml
+    - .gitlab-ci-hb.yml
+    - .gitmodules
+    - keystore.jks
+    - integrationtests/behave.ini
+    - integrationtests/requirements.txt
+    - integrationtests/appium_drivers/credentials.py
+
+security:
+  tools: []
+  block_severity: high
+
+commits:
+  convention: ticket-dash   # human: "<CARD> - message", as in the repo history (e.g. "TPZSO-2189 - ...")
+  trailers: false           # human: the repo history has no agent trailers
+
+branches:
+  base: development
+  official: "{card}"        # human: the branch is named exactly like the card
+
+workflow:
+  plan_approval: goldfish   # human: no human gate; Sokka reviews, then a context-free Sokka (goldfish) must also approve
+
+jira:
+  project_keys:
+    - TPZSO
+    - QAPC

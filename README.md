@@ -25,9 +25,13 @@ official branch, and **you** push and open the MR. Design and decisions: [`docs/
 ## Install (done once)
 
 ```bash
-uv tool install -e .                                # puts `agents-team` on PATH
-uv run python -m agents_team.adapters.kiro_install  # dashboard agents: agents-team, uncle-iroh
+uv tool install -e .     # puts `agents-team` on PATH
+agents-team install      # config, GitLab/Atlassian MCP, dashboard agents, repo profiles (idempotent)
+agents-team doctor       # checks credentials, MCP registration and GitLab reachability (VPN)
 ```
+
+New machine or another KiroCrew account (including a service account): see
+[`deploy/kiro/README.md`](deploy/kiro/README.md).
 
 Models and limits: `~/.agents-team/config.yml` (schema `schemas/team-config.schema.json`).
 
